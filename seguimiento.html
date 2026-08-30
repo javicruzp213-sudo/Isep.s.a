@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISEP, S.A. — Seguimiento de Servicio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --graphite:#1E2227; --graphite-soft:#2B3038;
+    --porcelain:#F6F2EA; --card:#FFFFFF;
+    --copper:#C1703F; --copper-deep:#8F4E28; --copper-light:#E8A876;
+    --voltage:#F0B429; --voltage-deep:#a9760c;
+    --ink:#20242C; --ink-soft:#666c78;
+    --line: rgba(32,36,44,0.13); --line-strong: rgba(32,36,44,0.22);
+    --wire-green:#3F7D5C; --wire-green-bg:#E7F1EB;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    background: var(--porcelain);
+    background-image: radial-gradient(circle at 1px 1px, rgba(32,36,44,0.055) 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: var(--ink); font-family:'Inter', sans-serif; min-height:100vh; margin:0; padding:20px;
+  }
+  .wrap{ max-width:560px; margin:40px auto; }
+  .card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:24px; box-shadow: 0 8px 24px rgba(32,36,44,0.06); }
+  .brand{ display:flex; align-items:center; gap:12px; margin-bottom:20px; border-bottom:1px solid var(--line); padding-bottom:16px; }
+  .badge{ width:38px; height:38px; border-radius:8px; background:var(--copper); display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-weight:600; color:#241205; font-size:13px; }
+  h1{ font-family:'Space Grotesk',sans-serif; font-size:18px; margin:0; }
+  p{ margin:0 0 10px; font-size:13.5px; color:var(--ink-soft); }
+  .folio-box{ font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--copper-deep); font-weight:600; background:rgba(193,112,63,0.08); padding:8px 12px; border-radius:8px; display:inline-block; margin-bottom:16px; }
+  .status-pill{ display:inline-block; font-size:12px; font-weight:700; padding:5px 12px; border-radius:20px; margin-bottom:16px; }
+  .sb-0{ background:#EEF0F3; color:#4A5160; } 
+  .sb-1{ background:#E9F0FB; color:#2A5EA8; }
+  .sb-2{ background:#FCF1DA; color:var(--voltage-deep); } 
+  .sb-3{ background:var(--wire-green-bg); color:var(--wire-green); }
+  .meta-grid{ display:grid; gap:8px; font-size:13px; margin-bottom:20px; }
+  .meta-grid b{ color:var(--ink); }
+  .leaflet-box{ height:220px; border-radius:10px; overflow:hidden; border:1px solid var(--line); margin-top:16px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="card" id="contentCard">
+    <div class="brand">
+      <div class="badge">IS</div>
+      <div>
+        <h1>ISEP, S.A.</h1>
+        <p style="margin:0; font-size:11.5px; font-family:'IBM Plex Mono',monospace;">SEGUIMIENTO DE SERVICIO</p>
+      </div>
+    </div>
+    <div id="statusContainer">
+      <p>Cargando información del servicio...</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBQ3ojcGtxCkd8zWTFz3Z-bXZux4kU8VrU",
+  authDomain: "isep-e7efe.firebaseapp.com",
+  projectId: "isep-e7efe",
+  storageBucket: "isep-e7efe.firebasestorage.app",
+  messagingSenderId: "838801875419",
+  appId: "1:838801875419:web:abef6e9fb2f0f7bcd907fe"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+const STATUS_NAMES = ['Recibido','Confirmado','En camino','Completado'];
+
+const urlParams = new URLSearchParams(window.location.search);
+const folio = urlParams.get('folio');
+
+if(!folio){
+  document.getElementById('statusContainer').innerHTML = '<p style="color:#B23A2E;">No se especificó un folio de seguimiento en el enlace.</p>';
+} else {
+  db.collection('solicitudes').doc(folio).get().then(doc => {
+    if(!doc.exists){
+      document.getElementById('statusContainer').innerHTML = `<p style="color:#B23A2E;">No se encontró ninguna solicitud registrada con el folio <b>${folio}</b>.</p>`;
+      return;
+    }
+    const data = doc.data();
+    const statusIdx = data.statusIdx !== undefined ? data.statusIdx : 0;
+    
+    document.getElementById('statusContainer').innerHTML = `
+      <div class="folio-box">FOLIO: ${data.folio}</div><br>
+      <div><span class="status-pill sb-${statusIdx}">${STATUS_NAMES[statusIdx]}</span></div>
+      <div class="meta-grid">
+        <div><b>Cliente:</b> ${data.nombre}</div>
+        <div><b>Dirección:</b> ${data.direccion}</div>
+        <div><b>Fecha programada:</b> ${data.fecha || 'N/A'} (${data.hora || 'N/A'})</div>
+      </div>
+      ${data.geo ? '<div id="map" class="leaflet-box"></div>' : '<p style="font-size:12px; color:var(--ink-soft);">Ubicación exacta no registrada en este servicio.</p>'}`;
+
+    if(data.geo){
+      setTimeout(()=>{
+        const map = L.map('map').setView([data.geo.lat, data.geo.lng], 16);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+        L.marker([data.geo.lat, data.geo.lng]).addTo(map).bindPopup('Ubicación del servicio').openPopup();
+      }, 200);
+    }
+  }).catch(err => {
+    console.error(err);
+    document.getElementById('statusContainer').innerHTML = '<p style="color:#B23A2E;">Error al conectar con la base de datos.</p>';
+  });
+}
+</script>
+</body>
+</html>

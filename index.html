@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISEP, S.A. — Servicio eléctrico a domicilio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --graphite:#1E2227; --graphite-soft:#2B3038;
+    --porcelain:#F6F2EA; --card:#FFFFFF;
+    --copper:#C1703F; --copper-deep:#8F4E28; --copper-light:#E8A876;
+    --voltage:#F0B429; --voltage-deep:#a9760c;
+    --ink:#20242C; --ink-soft:#666c78;
+    --line: rgba(32,36,44,0.13); --line-strong: rgba(32,36,44,0.22);
+    --wire-green:#3F7D5C; --wire-green-bg:#E7F1EB;
+    --danger:#B23A2E; --danger-bg:#FBEAE7;
+    --wa-green:#2E9E63;
+    --radius:14px;
+    --shadow-card: 0 1px 2px rgba(32,36,44,0.04), 0 8px 24px rgba(32,36,44,0.06);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: var(--porcelain);
+    background-image: radial-gradient(circle at 1px 1px, rgba(32,36,44,0.055) 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: var(--ink); font-family:'Inter', sans-serif; min-height:100vh; padding-bottom:64px;
+  }
+  .app{ width:100%; max-width:560px; margin:0 auto; }
+
+  .top-header{ position:relative; background:var(--graphite); overflow:hidden; }
+  .top-header::before{
+    content:""; position:absolute; top:0; right:0; height:100%; width:46%;
+    background: linear-gradient(160deg, var(--copper-deep), var(--copper));
+    clip-path: polygon(38% 0, 100% 0, 100% 100%, 0% 100%); opacity:.9;
+  }
+  .top-header-inner{ position:relative; z-index:2; display:flex; align-items:center; justify-content:space-between; padding:26px 24px 22px; }
+  .brand-block{ display:flex; align-items:center; gap:13px; }
+  .hex-badge{ width:48px; height:48px; flex-shrink:0; background: linear-gradient(160deg, #EFEFE9, #C9CBC2);
+    clip-path: polygon(25% 4%, 75% 4%, 100% 50%, 75% 96%, 25% 96%, 0% 50%); display:flex; align-items:center; justify-content:center; }
+  .hex-badge span{ font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:15px; color:var(--graphite); letter-spacing:.5px; }
+  .brand-text h1{ font-family:'Space Grotesk', sans-serif; font-size:22px; font-weight:700; color:var(--porcelain); margin:0; display:flex; align-items:baseline; gap:6px; }
+  .brand-text h1 small{ font-size:12px; font-weight:600; color:#D9DCE1; }
+  .brand-text p{ margin:3px 0 0; font-size:12px; color:#B9BEC7; letter-spacing:.3px; max-width:230px; }
+  .led-strip{ display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+  .led-row{ display:flex; gap:5px; }
+  .led{ width:7px; height:7px; border-radius:50%; background: rgba(255,255,255,0.18); }
+  .led.on{ background: var(--voltage); animation: blink 2.6s ease-in-out infinite; }
+  .led.on2{ background: var(--wire-green); animation: blink 2.6s ease-in-out infinite .5s; }
+  @keyframes blink{ 0%,100%{ opacity:.4; } 50%{ opacity:1; } }
+  .led-caption{ font-family:'IBM Plex Mono', monospace; font-size:9.5px; color:#9CA2AC; letter-spacing:.5px; }
+
+  .breaker-row{ display:flex; gap:8px; padding: 18px 24px 0; max-width:560px; margin:0 auto; }
+  .breaker{ flex:1; text-align:center; }
+  .breaker-lamp{ height:5px; border-radius:3px; background: var(--line); margin-bottom:8px; transition: background .35s ease; }
+  .breaker.done .breaker-lamp{ background: var(--wire-green); }
+  .breaker.active .breaker-lamp{ background: var(--copper); }
+  .breaker-label{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; letter-spacing:.6px; color: var(--ink-soft); text-transform:uppercase; }
+  .breaker.active .breaker-label{ color: var(--copper-deep); font-weight:600; }
+  .breaker.done .breaker-label{ color: var(--wire-green); }
+
+  .card{ background: var(--card); margin: 18px 20px 0; border-radius: var(--radius); box-shadow: var(--shadow-card); border:1px solid var(--line); padding: 26px 24px 22px; }
+  .step{ display:none; animation: rise .38s ease; } .step.visible{ display:block; }
+  @keyframes rise{ from{ opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+  .step h2{ font-family:'Space Grotesk', sans-serif; font-size:18px; font-weight:600; margin:0 0 4px; }
+  .step .sub{ font-size:13px; color:var(--ink-soft); margin:0 0 20px; }
+
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:12.5px; font-weight:600; color:var(--ink); margin-bottom:6px; }
+  .field input[type=text], .field input[type=tel], .field input[type=email],
+  .field input[type=date], .field input[type=time], .field textarea{
+    width:100%; border:1.5px solid var(--line-strong); border-radius:10px; padding:11px 13px; font-size:14.5px;
+    font-family:'Inter', sans-serif; background:#FCFBF8; color:var(--ink); transition: border-color .2s, background .2s;
+  }
+  .field textarea{ resize:vertical; min-height:64px; }
+  .field input:focus, .field textarea:focus{ outline:none; border-color: var(--copper); background:#fff; box-shadow: 0 0 0 3px rgba(193,112,63,0.14); }
+  .field .err{ display:none; font-size:12px; color:var(--danger); margin-top:5px; }
+  .field.invalid input, .field.invalid textarea{ border-color: var(--danger); background:var(--danger-bg); }
+  .field.invalid .err{ display:block; }
+  .row-2{ display:flex; gap:12px; } .row-2 .field{ flex:1; }
+
+  .service-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:6px; }
+  .switch-tile{ border:1.5px solid var(--line-strong); border-radius:12px; padding:14px 12px 12px; cursor:pointer; user-select:none;
+    background:#FCFBF8; transition: border-color .2s, background .2s; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+  .switch-tile:hover{ border-color: var(--copper-light); }
+  .switch-tile.on{ border-color: var(--copper); background:#FBF3EC; }
+  .toggle{ width:34px; height:18px; border-radius:9px; background: var(--line-strong); position:relative; transition: background .25s; }
+  .toggle::after{ content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); transition: transform .25s; }
+  .switch-tile.on .toggle{ background: var(--copper); }
+  .switch-tile.on .toggle::after{ transform: translateX(16px); }
+  .switch-tile .svc-name{ font-size:13px; font-weight:600; line-height:1.3; }
+  .switch-tile .svc-name i{ font-style:normal; display:block; font-size:11px; font-weight:400; color:var(--ink-soft); margin-top:2px; }
+
+  .geo-btn{ display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:11px; border-radius:10px;
+    border:1.5px dashed var(--copper); background:#FBF3EC; color:var(--copper-deep); font-weight:600; font-size:13.5px; cursor:pointer; font-family:'Inter', sans-serif; margin-top:2px; transition: background .2s; }
+  .geo-btn:hover{ background:#F6E7D9; } .geo-btn:disabled{ opacity:.6; cursor:progress; }
+  .geo-chip{ display:none; align-items:center; gap:8px; margin-top:10px; padding:9px 12px; background: var(--wire-green-bg); border-radius:9px; font-size:12.5px; color:var(--wire-green); }
+  .geo-chip.show{ display:flex; } .geo-chip svg{ width:15px; height:15px; flex-shrink:0; }
+  .geo-error{ display:none; margin-top:10px; padding:9px 12px; background:var(--danger-bg); color:var(--danger); border-radius:9px; font-size:12.5px; }
+  .geo-error.show{ display:block; }
+
+  .nav-row{ display:flex; gap:10px; margin-top:22px; }
+  .btn{ flex:1; padding:12px; border-radius:10px; border:none; font-family:'Inter', sans-serif; font-size:14.5px; font-weight:600; cursor:pointer; transition: transform .1s, background .2s, opacity .2s; }
+  .btn:active{ transform: scale(.98); }
+  .btn-ghost{ background:#F1EEE7; color:var(--ink); } .btn-ghost:hover{ background:#E9E4D9; }
+  .btn-primary{ background: var(--copper); color:#fff; } .btn-primary:hover{ background: var(--copper-deep); }
+  .btn-volt{ background: var(--voltage); color:#3d2a06; font-size:15.5px; padding:14px; animation: pulse-ring 2.4s ease-out infinite; }
+  .btn-volt:hover{ background: var(--voltage-deep); color:#fff; }
+  @keyframes pulse-ring{ 0%{ box-shadow: 0 0 0 0 rgba(240,180,41,.45);} 70%{ box-shadow: 0 0 0 10px rgba(240,180,41,0);} 100%{ box-shadow: 0 0 0 0 rgba(240,180,41,0);} }
+
+  #screen-success{ display:none; } #screen-success.visible{ display:block; animation: rise .4s ease; }
+  .success-mark{ width:56px; height:56px; border-radius:50%; background:var(--wire-green-bg); display:flex; align-items:center; justify-content:center; margin:4px auto 14px; }
+  .success-mark svg{ width:28px; height:28px; }
+  .success-title{ text-align:center; font-family:'Space Grotesk', sans-serif; font-size:19px; font-weight:600; margin:0 0 4px; }
+  .success-sub{ text-align:center; font-size:13px; color:var(--ink-soft); margin:0 0 20px; }
+  .folio-chip{ background: var(--graphite); border-radius:12px; padding:16px 18px; text-align:center; margin-bottom:20px; }
+  .folio-chip .lbl{ font-size:10.5px; letter-spacing:1.4px; color:#9AA0AB; text-transform:uppercase; font-family:'IBM Plex Mono',monospace; }
+  .folio-chip .num{ font-family:'IBM Plex Mono', monospace; font-size:23px; font-weight:600; color: var(--copper-light); letter-spacing:2px; margin-top:6px; }
+  .summary-list{ border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:14px 0; margin-bottom:20px; }
+  .summary-row{ display:flex; justify-content:space-between; gap:14px; padding:6px 0; font-size:13px; }
+  .summary-row .k{ color:var(--ink-soft); flex-shrink:0; } .summary-row .v{ text-align:right; font-weight:500; }
+
+  .status-title{ font-size:12.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.6px; margin-bottom:14px; }
+  .status-track{ display:flex; align-items:flex-start; }
+  .status-node{ flex:1; text-align:center; position:relative; }
+  .status-dot{ width:14px; height:14px; border-radius:50%; background:var(--line-strong); margin:0 auto 8px; position:relative; z-index:2; transition: background .3s; }
+  .status-node.done .status-dot{ background: var(--wire-green); }
+  .status-node.now .status-dot{ background: var(--voltage); box-shadow:0 0 0 4px rgba(240,180,41,.28); }
+  .status-node::before{ content:""; position:absolute; top:6px; left:-50%; width:100%; height:2px; background: var(--line-strong); z-index:1; }
+  .status-node:first-child::before{ display:none; }
+  .status-node.done::before, .status-node.now::before{ background: var(--wire-green); }
+  .status-name{ font-size:10.5px; color:var(--ink-soft); font-weight:500; }
+  .status-node.now .status-name{ color:var(--voltage-deep); font-weight:700; }
+  .status-node.done .status-name{ color:var(--wire-green); }
+
+  .live-chip{ display:flex; align-items:center; gap:6px; justify-content:center; font-size:11px; color:var(--wire-green); margin-top:10px; font-weight:600; }
+  .live-dot{ width:7px; height:7px; border-radius:50%; background:var(--wire-green); animation: blink 1.6s ease-in-out infinite; }
+  .demo-note{ margin-top:16px; font-size:11.5px; color:var(--ink-soft); text-align:center; }
+  .demo-btn{ display:block; margin:8px auto 0; background:none; border:1px solid var(--line-strong); padding:8px 14px; border-radius:8px; font-size:12px; color:var(--ink-soft); cursor:pointer; font-family:'Inter', sans-serif; }
+  .demo-btn:hover{ border-color: var(--copper); color:var(--copper-deep); }
+
+  .minimap-wrap{ display:none; margin-top:20px; } .minimap-wrap.show{ display:block; animation: rise .4s ease; }
+  .minimap-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; }
+  .minimap-head h3{ font-family:'Space Grotesk', sans-serif; font-size:14.5px; margin:0; }
+  .minimap-head span{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--copper-deep); font-weight:600; }
+  .leaflet-box{ border-radius:12px; overflow:hidden; border:1px solid var(--line); height:220px; filter: grayscale(.35) contrast(1.08) brightness(.97); }
+
+  .fab-stack{ position:fixed; right:18px; bottom:18px; display:flex; flex-direction:column; gap:12px; z-index:50; align-items:flex-end; }
+  .fab{ width:54px; height:54px; border-radius:50%; display:flex; align-items:center; justify-content:center; border:none; cursor:pointer; box-shadow:0 6px 18px rgba(32,36,44,0.22); color:#fff; }
+  .fab-wa{ background: var(--wa-green); }
+  .fab-ai{ background: var(--graphite); position:relative; }
+  .fab-ai .spark{ position:absolute; top:-3px; right:-3px; width:14px; height:14px; border-radius:50%; background:var(--voltage); border:2px solid #fff; }
+
+  .chat-panel{ position:fixed; right:18px; bottom:84px; width:310px; max-width:calc(100vw - 36px); background:#fff; border-radius:14px; box-shadow:0 10px 30px rgba(32,36,44,0.28); display:none; flex-direction:column; overflow:hidden; z-index:51; border:1px solid var(--line); }
+  .chat-panel.open{ display:flex; }
+  .chat-head{ background:var(--graphite); color:#fff; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .chat-head b{ font-family:'Space Grotesk', sans-serif; font-size:14px; }
+  .chat-head span{ display:block; font-size:11px; color:#B9BEC7; }
+  .chat-close{ background:none; border:none; color:#B9BEC7; cursor:pointer; font-size:16px; }
+  .chat-body{ height:260px; overflow-y:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
+  .msg{ max-width:82%; padding:8px 11px; border-radius:11px; font-size:13px; line-height:1.4; }
+  .msg.bot{ background:#F1EEE7; align-self:flex-start; border-bottom-left-radius:3px; }
+  .msg.user{ background:var(--copper); color:#fff; align-self:flex-end; border-bottom-right-radius:3px; }
+  .chat-input-row{ display:flex; gap:8px; padding:10px; border-top:1px solid var(--line); }
+  .chat-input-row input{ flex:1; border:1.5px solid var(--line-strong); border-radius:9px; padding:9px 10px; font-size:13px; font-family:'Inter',sans-serif; }
+  .chat-input-row button{ background:var(--copper); color:#fff; border:none; border-radius:9px; padding:0 14px; font-weight:600; cursor:pointer; }
+
+  .mode-toggle{ display:flex; gap:8px; margin:18px 20px 0; max-width:560px; margin-left:auto; margin-right:auto; }
+  .mode-btn{ flex:1; padding:10px; border-radius:9px; border:1px solid var(--line-strong); background:#fff; font-size:12.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:'Inter',sans-serif; }
+  .mode-btn.active{ background:var(--graphite); color:#fff; border-color:var(--graphite); }
+
+  @media (max-width:420px){
+    .top-header-inner{ padding:22px 16px 18px; } .breaker-row{ padding:16px 14px 0; } .card{ margin:16px 10px 0; padding:20px 16px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-header">
+  <div class="top-header-inner">
+    <div class="brand-block">
+      <div class="hex-badge"><span>IS</span></div>
+      <div class="brand-text">
+        <h1>ISEP <small>, S.A.</small></h1>
+        <p>Instalaciones y Servicios Eléctricos Profesionales · Cobertura en toda la República Mexicana</p>
+      </div>
+    </div>
+    <div class="led-strip">
+      <div class="led-row"><div class="led on"></div><div class="led on2"></div><div class="led"></div></div>
+      <div class="led-caption">LÍNEA ACTIVA</div>
+    </div>
+  </div>
+</div>
+
+<div class="app">
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="modeNew" onclick="setMode('new')">Nueva solicitud</button>
+    <button class="mode-btn" id="modeTrack" onclick="setMode('track')">Rastrear mi folio</button>
+  </div>
+
+  <div id="panelNew">
+  <div class="breaker-row" id="breakerRow">
+    <div class="breaker active" data-step="1"><div class="breaker-lamp"></div><div class="breaker-label">Contacto</div></div>
+    <div class="breaker" data-step="2"><div class="breaker-lamp"></div><div class="breaker-label">Servicio</div></div>
+    <div class="breaker" data-step="3"><div class="breaker-lamp"></div><div class="breaker-label">Dirección</div></div>
+    <div class="breaker" data-step="4"><div class="breaker-lamp"></div><div class="breaker-label">Agenda</div></div>
+  </div>
+
+  <div class="card" id="formCard">
+    <section class="step visible" data-step="1">
+      <h2>Datos de contacto</h2>
+      <p class="sub">Cuéntanos quién solicita el servicio.</p>
+      <div class="field" id="f-nombre"><label>Nombre completo</label><input type="text" id="nombre" placeholder="Ej. María Torres Gómez"><div class="err">Escribe tu nombre completo.</div></div>
+      <div class="field" id="f-telefono"><label>Teléfono de contacto</label><input type="tel" id="telefono" placeholder="221 000 0000"><div class="err">Ingresa un teléfono a 10 dígitos.</div></div>
+      <div class="field" id="f-correo"><label>Correo electrónico</label><input type="email" id="correo" placeholder="nombre@correo.com"><div class="err">Ingresa un correo válido.</div></div>
+      <div class="nav-row"><button class="btn btn-primary" style="flex:1" onclick="handleStep1Next()">Continuar</button></div>
+    </section>
+
+    <section class="step" data-step="2">
+      <h2>Tipo de servicio</h2>
+      <p class="sub">Activa uno o más interruptores según lo que necesites.</p>
+      <div class="service-grid" id="serviceGrid"></div>
+      <div class="field invalid" id="f-servicio" style="margin-top:2px; margin-bottom:0;"><div class="err">Selecciona al menos un servicio.</div></div>
+      <div class="nav-row"><button class="btn btn-ghost" onclick="goStep(1)">Atrás</button><button class="btn btn-primary" onclick="validateStep2()">Continuar</button></div>
+    </section>
+
+    <section class="step" data-step="3">
+      <h2>Dirección del domicilio</h2>
+      <p class="sub">Escríbela o captúrala automáticamente con tu ubicación.</p>
+      <div class="field" id="f-direccion"><label>Dirección completa</label><textarea id="direccion" placeholder="Calle, número, colonia, ciudad, C.P."></textarea><div class="err">Escribe o captura tu dirección.</div></div>
+      <button class="geo-btn" id="geoBtn" onclick="capturarUbicacion()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        Capturar dirección exacta automáticamente
+      </button>
+      <div class="geo-chip" id="geoChip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg><span id="geoChipText">Ubicación capturada</span></div>
+      <div class="geo-error" id="geoError"></div>
+      <div class="nav-row"><button class="btn btn-ghost" onclick="goStep(2)">Atrás</button><button class="btn btn-primary" onclick="validateStep3()">Continuar</button></div>
+    </section>
+
+    <section class="step" data-step="4">
+      <h2>Fecha y hora de la visita</h2>
+      <p class="sub">Elige cuándo quieres que llegue el electricista.</p>
+      <div class="row-2">
+        <div class="field" id="f-fecha"><label>Fecha</label><input type="date" id="fecha"><div class="err">Selecciona una fecha.</div></div>
+        <div class="field" id="f-hora"><label>Hora</label><input type="time" id="hora"><div class="err">Selecciona una hora.</div></div>
+      </div>
+      <div class="nav-row"><button class="btn btn-ghost" onclick="goStep(3)">Atrás</button><button class="btn btn-volt" style="flex:1" onclick="enviarSolicitud()">Enviar solicitud</button></div>
+    </section>
+  </div>
+
+  <div class="card" id="screen-success">
+    <div class="success-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#3F7D5C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+    <p class="success-title">Solicitud enviada</p>
+    <p class="success-sub">Un electricista revisará tu caso y confirmará pronto.</p>
+    <div class="folio-chip"><div class="lbl">Folio de seguimiento</div><div class="num" id="folioNum">—</div></div>
+    <div class="summary-list" id="summaryList"></div>
+    <div class="status-title">Estatus de tu servicio</div>
+    <div class="status-track" id="statusTrack">
+      <div class="status-node" data-s="0"><div class="status-dot"></div><div class="status-name">Recibido</div></div>
+      <div class="status-node" data-s="1"><div class="status-dot"></div><div class="status-name">Confirmado</div></div>
+      <div class="status-node" data-s="2"><div class="status-dot"></div><div class="status-name">En camino</div></div>
+      <div class="status-node" data-s="3"><div class="status-dot"></div><div class="status-name">Completado</div></div>
+    </div>
+    <div id="liveChip" class="live-chip" style="display:none;"><div class="live-dot"></div>Estatus en vivo desde el panel administrativo</div>
+    <div class="minimap-wrap" id="minimapWrap">
+      <div class="minimap-head"><h3>Tu electricista va en camino</h3><span id="etaText">Ubicando…</span></div>
+      <div id="leafletClient" class="leaflet-box"></div>
+      <p id="clientMapNote" style="font-size:11.5px; color:var(--ink-soft); margin:8px 2px 0;"></p>
+    </div>
+    <div class="demo-note" id="demoNote" style="display:none;">
+      Este sitio aún no está conectado a la base de datos, así que no podemos mostrarte el estatus en vivo. Escríbenos por WhatsApp con tu folio y con gusto te apoyamos.
+    </div>
+  </div>
+  </div><!-- /panelNew -->
+
+  <div class="card" id="panelTrack" style="display:none;">
+    <h2 style="font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:600; margin:0 0 4px;">Rastrear mi solicitud</h2>
+    <p class="sub">Ingresa el folio que recibiste al enviar tu solicitud.</p>
+    <div class="field" id="f-folioTrack">
+      <label>Número de folio</label>
+      <input type="text" id="folioInput" placeholder="CC-20260829-1234" style="text-transform:uppercase;">
+      <div class="err" id="folioErr">No encontramos ese folio. Verifica que esté bien escrito.</div>
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="rastrearFolio()">Buscar</button>
+
+    <div id="trackResult" style="display:none; margin-top:22px;">
+      <div class="folio-chip"><div class="lbl">Folio</div><div class="num" id="trackFolioNum">—</div></div>
+      <div class="summary-list" id="trackSummaryList"></div>
+      <div class="status-title">Estatus de tu servicio</div>
+      <div class="status-track" id="trackStatusTrack">
+        <div class="status-node" data-s="0"><div class="status-dot"></div><div class="status-name">Recibido</div></div>
+        <div class="status-node" data-s="1"><div class="status-dot"></div><div class="status-name">Confirmado</div></div>
+        <div class="status-node" data-s="2"><div class="status-dot"></div><div class="status-name">En camino</div></div>
+        <div class="status-node" data-s="3"><div class="status-dot"></div><div class="status-name">Completado</div></div>
+      </div>
+      <div class="live-chip" style="display:flex;"><div class="live-dot"></div>Actualizando en vivo</div>
+      <div class="minimap-wrap" id="trackMinimapWrap">
+        <div class="minimap-head"><h3>Tu electricista va en camino</h3><span id="trackEtaText">Ubicando…</span></div>
+        <div id="leafletTrack" class="leaflet-box"></div>
+        <p id="trackMapNote" style="font-size:11.5px; color:var(--ink-soft); margin:8px 2px 0;"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="fab-stack">
+  <button class="fab fab-ai" onclick="toggleChat()" aria-label="Asistente ISEP">
+    <div class="spark"></div>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="5"/></svg>
+  </button>
+  <a class="fab fab-wa" id="waButton" href="#" target="_blank" rel="noopener" aria-label="WhatsApp">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><path d="M21 11.5a8.5 8.5 0 0 1-12.36 7.56L3 20l1.02-5.4A8.5 8.5 0 1 1 21 11.5Z"/><path d="M8.5 10.5c.3 2.4 2.6 4.7 5 5" stroke-linecap="round"/></svg>
+  </a>
+</div>
+
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-head">
+    <div><b>Asistente ISEP</b><span>Gemini 3.5 Flash Lite</span></div>
+    <button class="chat-close" onclick="toggleChat()">✕</button>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="chat-input-row">
+    <input type="text" id="chatInput" placeholder="Escribe tu pregunta…" onkeydown="if(event.key==='Enter') enviarChat()">
+    <button onclick="enviarChat()">Enviar</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   🔧 ESPACIO DE CONFIGURACIÓN — edita estos valores
+   ============================================================ */
+
+// Datos de tu proyecto de Firebase (Firebase Console → Configuración
+// del proyecto → SDK de Firebase). Usa EXACTAMENTE los mismos valores
+// en este archivo y en admin.html para que ambos lean/escriban la
+// misma base de datos y el estatus se sincronice en tiempo real.
+const firebaseConfig = {
+  apiKey: "AIzaSyBQ3ojcGtxCkd8zWTFz3Z-bXZux4kU8VrU",
+  authDomain: "isep-e7efe.firebaseapp.com",
+  projectId: "isep-e7efe",
+  storageBucket: "isep-e7efe.firebasestorage.app",
+  messagingSenderId: "838801875419",
+  appId: "1:838801875419:web:abef6e9fb2f0f7bcd907fe"
+};
+
+// Número de WhatsApp de contacto (con lada de país, sin + ni espacios)
+const WHATSAPP_NUMBER = "522217915770";
+
+// El asistente de Gemini ya NO necesita clave aquí: la llamada se hace
+// a /api/gemini (función serverless de Vercel), que guarda la clave
+// como variable de entorno del servidor. Ver api/gemini.js.
+
+/* ============================================================ */
+
+let firestoreDb = null;
+try{
+  if(firebaseConfig.apiKey && firebaseConfig.projectId){
+    firebase.initializeApp(firebaseConfig);
+    firestoreDb = firebase.firestore();
+  }
+}catch(e){ console.warn('Firebase no se pudo inicializar:', e); }
+
+const DEFAULT_CENTER = [17.9869, -92.9303]; // Villahermosa, Tabasco — mayor cobertura; el servicio es en toda la República Mexicana
+document.getElementById('waButton').href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Hola ISEP, quisiera información sobre un servicio eléctrico.')}`;
+
+/* ---------------- SERVICIOS ---------------- */
+const SERVICIOS = [
+  { id:'instalacion', nombre:'Instalación eléctrica', detalle:'Cableado, contactos, apagadores' },
+  { id:'corto', nombre:'Corto circuito / emergencia', detalle:'Atención urgente' },
+  { id:'medidor', nombre:'Cambio de medidor', detalle:'Sustitución o reubicación' },
+  { id:'panel', nombre:'Revisión de panel', detalle:'Centro de carga y pastillas' },
+  { id:'clima', nombre:'Aire acondicionado', detalle:'Instalación de línea dedicada' },
+  { id:'iluminacion', nombre:'Iluminación y contactos', detalle:'Lámparas y salidas nuevas' },
+];
+const state = { step:1, servicios:new Set(), geo:null };
+const grid = document.getElementById('serviceGrid');
+SERVICIOS.forEach(s=>{
+  const tile = document.createElement('div');
+  tile.className='switch-tile'; tile.dataset.id = s.id;
+  tile.innerHTML = `<div class="toggle"></div><div class="svc-name">${s.nombre}<i>${s.detalle}</i></div>`;
+  tile.addEventListener('click', ()=>{
+    tile.classList.toggle('on');
+    if(tile.classList.contains('on')) state.servicios.add(s.id); else state.servicios.delete(s.id);
+    if(state.servicios.size>0) document.getElementById('f-servicio').classList.remove('invalid');
+  });
+  grid.appendChild(tile);
+});
+
+function goStep(n){
+  document.querySelectorAll('.step').forEach(el=> el.classList.toggle('visible', +el.dataset.step===n));
+  document.querySelectorAll('.breaker').forEach(el=>{
+    const st = +el.dataset.step;
+    el.classList.toggle('active', st===n); el.classList.toggle('done', st<n);
+  });
+  state.step = n;
+}
+function markInvalid(id, invalid){ document.getElementById(id).classList.toggle('invalid', invalid); }
+
+function validateStep1(){
+  const nombre = document.getElementById('nombre').value.trim();
+  const tel = document.getElementById('telefono').value.trim();
+  const correo = document.getElementById('correo').value.trim();
+  let ok = true;
+  if(nombre.length<3){ markInvalid('f-nombre',true); ok=false; } else markInvalid('f-nombre',false);
+  if(!/^\d{10}$/.test(tel.replace(/\D/g,''))){ markInvalid('f-telefono',true); ok=false; } else markInvalid('f-telefono',false);
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){ markInvalid('f-correo',true); ok=false; } else markInvalid('f-correo',false);
+  return ok;
+}
+function handleStep1Next(){ if(validateStep1()) goStep(2); }
+function validateStep2(){ if(state.servicios.size===0){ document.getElementById('f-servicio').classList.add('invalid'); return; } goStep(3); }
+function validateStep3(){
+  const dir = document.getElementById('direccion').value.trim();
+  if(dir.length<6){ markInvalid('f-direccion',true); return; }
+  markInvalid('f-direccion',false); goStep(4);
+}
+function validateStep4(){
+  const fecha = document.getElementById('fecha').value, hora = document.getElementById('hora').value;
+  let ok = true;
+  if(!fecha){ markInvalid('f-fecha', true); ok=false; } else markInvalid('f-fecha', false);
+  if(!hora){ markInvalid('f-hora', true); ok=false; } else markInvalid('f-hora', false);
+  return ok;
+}
+
+function capturarUbicacion(){
+  const btn = document.getElementById('geoBtn'), chip = document.getElementById('geoChip'), err = document.getElementById('geoError');
+  err.classList.remove('show');
+  if(!navigator.geolocation){ err.textContent = 'Tu navegador no permite obtener la ubicación. Escribe tu dirección manualmente.'; err.classList.add('show'); return; }
+  btn.disabled = true; btn.textContent = 'Obteniendo ubicación…';
+  navigator.geolocation.getCurrentPosition(async (pos)=>{
+    const { latitude, longitude } = pos.coords;
+    state.geo = { lat:latitude, lng:longitude };
+    let direccionTexto = null;
+    try{
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`);
+      const data = await r.json();
+      if(data && data.display_name) direccionTexto = data.display_name;
+    }catch(e){}
+    document.getElementById('direccion').value = direccionTexto || `Ubicación GPS capturada (lat ${latitude.toFixed(5)}, lon ${longitude.toFixed(5)}) — completa el número o referencias.`;
+    markInvalid('f-direccion', false);
+    document.getElementById('geoChipText').textContent = `Ubicación capturada · ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    chip.classList.add('show'); btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Capturar de nuevo';
+  }, ()=>{
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg> Capturar dirección exacta automáticamente';
+    err.textContent = 'No pudimos obtener tu ubicación. Verifica el permiso de ubicación o escribe tu dirección.'; err.classList.add('show');
+  }, { enableHighAccuracy:true, timeout:10000 });
+}
+
+/* ---------------- ENVÍO DE SOLICITUD ---------------- */
+let currentSolicitud = null;
+const STATUS_NAMES = ['Recibido','Confirmado','En camino','Completado'];
+
+function genFolio(){
+  const d = new Date(); const ymd = d.toISOString().slice(0,10).replace(/-/g,''); const rand = Math.floor(1000+Math.random()*9000);
+  return `CC-${ymd}-${rand}`;
+}
+
+async function geocodificarDireccion(direccion){
+  try{
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=mx&q=${encodeURIComponent(direccion)}`);
+    const data = await r.json();
+    if(data && data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  }catch(e){ console.warn('No se pudo geocodificar la dirección', e); }
+  return null;
+}
+
+async function enviarSolicitud(){
+  if(!validateStep4()) return;
+  const btnEnviar = document.querySelector('[onclick="enviarSolicitud()"]');
+  if(btnEnviar){ btnEnviar.disabled = true; btnEnviar.textContent = 'Enviando…'; }
+
+  const direccion = document.getElementById('direccion').value.trim();
+  // Si el cliente no usó "Capturar ubicación automáticamente", geocodificamos
+  // su dirección escrita para poder ubicarla en el mapa y calcular la ruta real.
+  let geo = state.geo;
+  if(!geo) geo = await geocodificarDireccion(direccion);
+
+  const nuevo = {
+    folio: genFolio(),
+    nombre: document.getElementById('nombre').value.trim(),
+    telefono: document.getElementById('telefono').value.trim(),
+    correo: document.getElementById('correo').value.trim(),
+    servicios: Array.from(state.servicios),
+    direccion: direccion,
+    geo: geo,
+    tecnicoGeo: null,
+    fecha: document.getElementById('fecha').value,
+    hora: document.getElementById('hora').value,
+    statusIdx: 0,
+    createdAt: Date.now()
+  };
+  currentSolicitud = nuevo;
+
+  if(firestoreDb){
+    firestoreDb.collection('solicitudes').doc(nuevo.folio).set(nuevo)
+      .catch(e=>console.warn('No se pudo guardar en Firestore', e));
+  }
+
+  const nombresServicios = SERVICIOS.filter(s=>nuevo.servicios.includes(s.id)).map(s=>s.nombre).join(', ');
+  const fechaFmt = new Date(nuevo.fecha+'T00:00:00').toLocaleDateString('es-MX', { day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('folioNum').textContent = nuevo.folio;
+  document.getElementById('summaryList').innerHTML = `
+    <div class="summary-row"><span class="k">Nombre</span><span class="v">${nuevo.nombre}</span></div>
+    <div class="summary-row"><span class="k">Teléfono</span><span class="v">${nuevo.telefono}</span></div>
+    <div class="summary-row"><span class="k">Servicio</span><span class="v">${nombresServicios}</span></div>
+    <div class="summary-row"><span class="k">Dirección</span><span class="v">${nuevo.direccion}</span></div>
+    <div class="summary-row"><span class="k">Visita</span><span class="v">${fechaFmt}, ${nuevo.hora}</span></div>
+  `;
+  document.getElementById('formCard').style.display = 'none';
+  document.getElementById('breakerRow').style.display = 'none';
+  document.getElementById('screen-success').classList.add('visible');
+
+  if(firestoreDb){
+    // Estatus en vivo: si el panel administrativo cambia el estatus (o el
+    // técnico comparte su ubicación), aquí se refleja solo, sin recargar.
+    document.getElementById('liveChip').style.display = 'flex';
+    firestoreDb.collection('solicitudes').doc(nuevo.folio).onSnapshot(doc=>{
+      const d = doc.data();
+      if(d){ currentSolicitud = d; renderClientStatus(); }
+    });
+  } else {
+    document.getElementById('demoNote').style.display = 'block';
+    renderClientStatus();
+  }
+}
+
+function renderClientStatus(){
+  document.querySelectorAll('#statusTrack .status-node').forEach(node=>{
+    const s = +node.dataset.s;
+    node.classList.toggle('done', s < currentSolicitud.statusIdx);
+    node.classList.toggle('now', s === currentSolicitud.statusIdx);
+  });
+  const isEnCamino = STATUS_NAMES[currentSolicitud.statusIdx] === 'En camino';
+  document.getElementById('minimapWrap').classList.toggle('show', isEnCamino);
+  if(isEnCamino) actualizarMapaEnVivo('leafletClient', 'etaText', 'clientMapNote', currentSolicitud);
+}
+
+/* ---------------- LEAFLET: ubicación real del técnico + ruta ---------------- */
+let clientMap = null, clientMapMarkers = {};
+function homeIcon(){ return L.divIcon({ className:'', html:'<div style="width:26px;height:26px;border-radius:50%;background:#3F7D5C;border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3);color:#fff;font-size:13px;">🏠</div>', iconSize:[26,26], iconAnchor:[13,13] }); }
+function vanIcon(){ return L.divIcon({ className:'', html:'<div style="width:26px;height:26px;border-radius:50%;background:#F0B429;border:2px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.3);color:#3d2a06;font-size:13px;">⚡</div>', iconSize:[26,26], iconAnchor:[13,13] }); }
+
+// Dibuja el mapa real de una solicitud: casa del cliente + ubicación real que
+// comparte el técnico desde tecnico.html, con ruta y ETA calculados por OSRM.
+async function actualizarMapaEnVivo(mapElId, etaElId, noteElId, d){
+  const noteEl = document.getElementById(noteElId);
+  if(!d.geo){
+    document.getElementById(etaElId).textContent = '—';
+    if(noteEl) noteEl.textContent = 'No pudimos ubicar tu dirección en el mapa. Verifica que esté completa.';
+    return;
+  }
+  const mapKey = mapElId;
+  if(!clientMapMarkers[mapKey]) clientMapMarkers[mapKey] = { map:null, home:null, tec:null, route:null };
+  const ref = clientMapMarkers[mapKey];
+  if(!ref.map){
+    ref.map = L.map(mapElId, { zoomControl:false, attributionControl:false }).setView([d.geo.lat, d.geo.lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(ref.map);
+    ref.home = L.marker([d.geo.lat, d.geo.lng], { icon: homeIcon() }).addTo(ref.map);
+    setTimeout(()=> ref.map.invalidateSize(), 150);
+  }
+
+  if(!d.tecnicoGeo){
+    document.getElementById(etaElId).textContent = 'Ubicando…';
+    if(noteEl) noteEl.textContent = 'Esperando a que el electricista active su ubicación en camino.';
+    ref.map.setView([d.geo.lat, d.geo.lng], 14);
+    return;
+  }
+
+  if(ref.tec) ref.tec.setLatLng([d.tecnicoGeo.lat, d.tecnicoGeo.lng]);
+  else ref.tec = L.marker([d.tecnicoGeo.lat, d.tecnicoGeo.lng], { icon: vanIcon() }).addTo(ref.map);
+
+  try{
+    const url = `https://router.project-osrm.org/route/v1/driving/${d.tecnicoGeo.lng},${d.tecnicoGeo.lat};${d.geo.lng},${d.geo.lat}?overview=full&geometries=geojson`;
+    const r = await fetch(url);
+    const data = await r.json();
+    const ruta = data?.routes?.[0];
+    if(ruta){
+      const coords = ruta.geometry.coordinates.map(c=>[c[1],c[0]]);
+      if(ref.route) ref.route.setLatLngs(coords);
+      else ref.route = L.polyline(coords, { color:'#C1703F', weight:4, opacity:.85 }).addTo(ref.map);
+      ref.map.fitBounds(ref.route.getBounds(), { padding:[28,28] });
+      const minutos = Math.max(1, Math.round(ruta.duration/60));
+      document.getElementById(etaElId).textContent = `ETA ${minutos} min`;
+      if(noteEl) noteEl.textContent = `Distancia aproximada: ${(ruta.distance/1000).toFixed(1)} km.`;
+    }
+  }catch(e){
+    document.getElementById(etaElId).textContent = 'En camino';
+    if(noteEl) noteEl.textContent = 'No se pudo calcular la ruta exacta en este momento.';
+    const bounds = L.latLngBounds([[d.geo.lat,d.geo.lng],[d.tecnicoGeo.lat,d.tecnicoGeo.lng]]);
+    ref.map.fitBounds(bounds, { padding:[28,28] });
+  }
+}
+
+/* ---------------- CHAT GEMINI ---------------- */
+function toggleChat(){
+  const panel = document.getElementById('chatPanel');
+  panel.classList.toggle('open');
+  if(panel.classList.contains('open') && document.getElementById('chatBody').children.length===0){
+    addMsg('bot', 'Hola, soy el asistente de ISEP. ¿En qué puedo ayudarte con tu instalación eléctrica?');
+  }
+}
+function addMsg(who, text){
+  const body = document.getElementById('chatBody');
+  const div = document.createElement('div'); div.className = `msg ${who}`; div.textContent = text;
+  body.appendChild(div); body.scrollTop = body.scrollHeight;
+}
+async function enviarChat(){
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim(); if(!text) return;
+  addMsg('user', text); input.value = '';
+  addMsg('bot', 'Escribiendo…');
+  const respuesta = await consultarGemini(text);
+  document.getElementById('chatBody').lastChild.textContent = respuesta;
+}
+async function consultarGemini(mensaje){
+  try{
+    const r = await fetch('/api/gemini', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ mensaje })
+    });
+    const data = await r.json();
+    return data.texto || 'No obtuve respuesta, intenta de nuevo.';
+  }catch(e){
+    return 'No pude conectar con el asistente en este momento. Intenta más tarde o escríbenos por WhatsApp.';
+  }
+}
+
+/* ---------------- MODO: nueva solicitud / rastrear folio ---------------- */
+function setMode(m){
+  document.getElementById('panelNew').style.display = m==='new' ? 'block' : 'none';
+  document.getElementById('panelTrack').style.display = m==='track' ? 'block' : 'none';
+  document.getElementById('modeNew').classList.toggle('active', m==='new');
+  document.getElementById('modeTrack').classList.toggle('active', m==='track');
+}
+
+let trackUnsub = null;
+function rastrearFolio(){
+  const raw = document.getElementById('folioInput').value.trim().toUpperCase();
+  const field = document.getElementById('f-folioTrack');
+  field.classList.remove('invalid');
+  document.getElementById('trackResult').style.display = 'none';
+  if(!raw){ document.getElementById('folioErr').textContent = 'Escribe tu número de folio.'; field.classList.add('invalid'); return; }
+  if(trackUnsub){ trackUnsub(); trackUnsub = null; }
+  if(!firestoreDb){
+    document.getElementById('folioErr').textContent = 'El rastreo en vivo requiere que el sitio esté conectado a Firebase. Escríbenos por WhatsApp con tu folio y te ayudamos.';
+    field.classList.add('invalid');
+    return;
+  }
+  firestoreDb.collection('solicitudes').doc(raw).get().then(doc=>{
+    if(!doc.exists){
+      document.getElementById('folioErr').textContent = 'No encontramos ese folio. Verifica que esté bien escrito.';
+      field.classList.add('invalid');
+      return;
+    }
+    document.getElementById('trackResult').style.display = 'block';
+    trackUnsub = firestoreDb.collection('solicitudes').doc(raw).onSnapshot(d=> renderTrackResult(raw, d.data()));
+  }).catch(()=>{
+    document.getElementById('folioErr').textContent = 'Ocurrió un error al buscar. Intenta de nuevo.';
+    field.classList.add('invalid');
+  });
+}
+
+function renderTrackResult(folio, d){
+  document.getElementById('trackFolioNum').textContent = folio;
+  const nombresServicios = SERVICIOS.filter(s=>d.servicios.includes(s.id)).map(s=>s.nombre).join(', ');
+  const fechaFmt = new Date(d.fecha+'T00:00:00').toLocaleDateString('es-MX', { day:'numeric', month:'long', year:'numeric' });
+  document.getElementById('trackSummaryList').innerHTML = `
+    <div class="summary-row"><span class="k">Servicio</span><span class="v">${nombresServicios}</span></div>
+    <div class="summary-row"><span class="k">Dirección</span><span class="v">${d.direccion}</span></div>
+    <div class="summary-row"><span class="k">Visita</span><span class="v">${fechaFmt}, ${d.hora}</span></div>
+  `;
+  document.querySelectorAll('#trackStatusTrack .status-node').forEach(node=>{
+    const s = +node.dataset.s;
+    node.classList.toggle('done', s < d.statusIdx);
+    node.classList.toggle('now', s === d.statusIdx);
+  });
+  const isEnCamino = STATUS_NAMES[d.statusIdx] === 'En camino';
+  document.getElementById('trackMinimapWrap').classList.toggle('show', isEnCamino);
+  if(isEnCamino) actualizarMapaEnVivo('leafletTrack', 'trackEtaText', 'trackMapNote', d);
+}
+
+document.getElementById('fecha').min = new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>

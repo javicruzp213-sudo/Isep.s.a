@@ -15,6 +15,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
 <style>
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
@@ -1212,6 +1213,20 @@ button { -webkit-tap-highlight-color: transparent; }
 </div>
 
 <div class="app">
+  <div style="text-align:center; margin:20px 0;">
+  <button
+    id="activarNotificaciones"
+    type="button"
+    class="btn btn-primary"
+    onclick="activarNotificacionesISEP()"
+  >
+    🔔 Activar notificaciones
+  </button>
+  <p id="estadoNotificaciones"
+     style="font-size:12px; margin-top:8px;">
+  </p>
+  </div>
+  
   <div class="mode-toggle">
     <button class="mode-btn active" id="modeNew" onclick="setMode('new')">Nueva solicitud</button>
     <button class="mode-btn" id="modeTrack" onclick="setMode('track')">Rastrear mi folio</button>
@@ -1413,8 +1428,57 @@ try{
     firebase.initializeApp(firebaseConfig);
     firestoreDb = firebase.firestore();
   }
-}catch(e){ console.warn('Firebase no se pudo inicializar:', e); }
+}catch(e){ console.warn('Firebase no se pudo inicializar)
+                        // ========================================
+// ISEP - ACTIVAR NOTIFICACIONES PUSH
+// ========================================
 
+async function activarNotificacionesISEP() {
+  const estado = document.getElementById('estadoNotificaciones');
+
+  try {
+    if (!('Notification' in window) ||
+        !('serviceWorker' in navigator) ||
+        !('PushManager' in window) ||
+        !firebase.messaging.isSupported()) {
+      estado.textContent = 'Este navegador no admite notificaciones push.';
+      return;
+    }
+
+    const permiso = await Notification.requestPermission();
+
+    if (permiso !== 'granted') {
+      estado.textContent = 'No se concedió permiso para las notificaciones.';
+      return;
+    }
+
+    const registro = await navigator.serviceWorker.register(
+      '/firebase-messaging-sw.js'
+    );
+
+    const messaging = firebase.messaging();
+
+    const token = await messaging.getToken({
+      vapidKey: 'BMJh6C00evl3lxEPvhgedFvZcURzIOm1-_-M2JOiDl0J_mJEdFP_3oaJmMs-hpX5jBAp7DYGCiCHRIVOZBi-Y0Y',
+      serviceWorkerRegistration: registro
+    });
+
+    if (!token) {
+      estado.textContent = 'No se pudo registrar el dispositivo.';
+      return;
+    }
+
+    // Por seguridad, todavía no enviamos el token
+    // a Firestore ni lo asociamos con un usuario.
+    estado.textContent = '✅ Notificaciones habilitadas en este dispositivo.';
+
+    console.log('ISEP: token FCM obtenido correctamente.');
+
+  } catch (error) {
+    console.error('Error al activar notificaciones:', error);
+    estado.textContent = 'No se pudieron activar las notificaciones.';
+  }
+}
 const DEFAULT_CENTER = [17.9869, -92.9303]; // Villahermosa, Tabasco — mayor cobertura; el servicio es en toda la República Mexicana
 document.getElementById('waButton').href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Hola ISEP, quisiera información sobre un servicio eléctrico.')}`;
 

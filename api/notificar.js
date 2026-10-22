@@ -1,19 +1,40 @@
 // Vercel Serverless Function: envía una notificación push al cliente
 // cuando cambia el estatus de su folio.
-// Requiere la variable de entorno FIREBASE_SERVICE_ACCOUNT (JSON de la cuenta de servicio).
-// Opcional: ADMIN_UIDS = uids de administración/logística separados por comas
-// (también pueden disparar avisos de cualquier folio).
+// Variables de entorno:
+//   FIREBASE_SERVICE_ACCOUNT (obligatoria): JSON de la cuenta de servicio.
+//   ADMIN_UIDS (opcional): uids de administración/logística separados por comas.
+//   ORIGENES_EXTRA (opcional): dominios extra permitidos, separados por comas.
 const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
-  });
+  const cuenta = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  // Vercel a veces guarda los saltos de línea de la llave como "\n" literal.
+  if (cuenta.private_key) cuenta.private_key = cuenta.private_key.replace(/\\n/g, '\n');
+  admin.initializeApp({ credential: admin.credential.cert(cuenta) });
 }
 
 const SITIO = 'https://isep-s-a.vercel.app/';
-const ORIGENES_PERMITIDOS = ['https://isep-s-a.vercel.app'];
-const ADMIN_UIDS = (process.env.ADMIN_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+// Páginas autorizadas para llamar a esta función (sin "/" al final).
+const ORIGENES_PERMITIDOS = [
+  'https://isep-s-a.vercel.app',
+  'https://tecnicoadm.netlify.app',
+  ...(process.env.ORIGENES_EXTRA || '')
+    .split(',')
+    .map(s => s.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+];
+
+const ADMIN_UIDS = (process.env.ADMIN_UIDS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+// Errores de FCM que significan que el token del cliente ya no sirve.
+const TOKEN_INVALIDO = [
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-registration-token'
+];
 
 module.exports = async (req, res) => {
   const origin = req.headers.origin;
@@ -28,7 +49,9 @@ module.exports = async (req, res) => {
 
   try {
     // 1) Debe venir con una sesión válida de Firebase.
-    const idToken = (req.headers.authorization || '').replace('Bearer ', '');
+    const idToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+    if (!idToken) return res.status(401).json({ error: 'No autorizado' });
+
     let decoded;
     try {
       decoded = await admin.auth().verifyIdToken(idToken);
@@ -36,8 +59,16 @@ module.exports = async (req, res) => {
       return res.status(401).json({ error: 'No autorizado' });
     }
 
-    const folio = String((req.body && req.body.folio) || '').trim();
-    if (!folio || folio.includes('/')) return res.status(400).json({ error: 'Falta el folio' });
+    // El body puede llegar como string si el Content-Type no es JSON.
+    let body = req.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) { body = {}; }
+    }
+
+    const folio = String((body && body.folio) || '').trim();
+    if (!folio || folio.length > 100 || folio.includes('/')) {
+      return res.status(400).json({ error: 'Falta el folio' });
+    }
 
     const ref = admin.firestore().collection('solicitudes').doc(folio);
     const snap = await ref.get();
@@ -52,12 +83,13 @@ module.exports = async (req, res) => {
       return res.status(403).json({ error: 'Sin permiso para este folio' });
     }
 
-    if (!d.fcmToken) return res.status(200).json({ enviado: false, motivo: 'El cliente no activó notificaciones' });
+    if (!d.fcmToken) {
+      return res.status(200).json({ enviado: false, motivo: 'El cliente no activó notificaciones' });
+    }
 
     // El texto sale del estatus guardado en Firestore, no de lo que mande el panel.
-    const cuerpo = d.tecnicoNombre
-      ? `${d.estatus} · Técnico: ${d.tecnicoNombre}`
-      : String(d.estatus || 'Tu solicitud se actualizó');
+    const estatus = String(d.estatus || 'Tu solicitud se actualizó');
+    const cuerpo = d.tecnicoNombre ? `${estatus} · Técnico: ${d.tecnicoNombre}` : estatus;
 
     try {
       await admin.messaging().send({
@@ -66,12 +98,13 @@ module.exports = async (req, res) => {
         webpush: { fcmOptions: { link: `${SITIO}?folio=${encodeURIComponent(folio)}` } }
       });
     } catch (e) {
-      if (e.code === 'messaging/registration-token-not-registered') {
+      if (TOKEN_INVALIDO.includes(e.code)) {
         await ref.update({ fcmToken: admin.firestore.FieldValue.delete() });
         return res.status(200).json({ enviado: false, motivo: 'El token ya no es válido' });
       }
       throw e;
     }
+
     return res.status(200).json({ enviado: true });
   } catch (e) {
     console.error('notificar error', e);

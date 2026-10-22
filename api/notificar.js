@@ -92,11 +92,23 @@ module.exports = async (req, res) => {
     const cuerpo = d.tecnicoNombre ? `${estatus} · Técnico: ${d.tecnicoNombre}` : estatus;
 
     try {
+          try {
       await admin.messaging().send({
         token: d.fcmToken,
         notification: { title: `ISEP · Folio ${folio}`, body: cuerpo },
-        webpush: { fcmOptions: { link: `${SITIO}?folio=${encodeURIComponent(folio)}` } }
+        webpush: {
+          notification: {
+            icon: `${SITIO}icon-192.png`,
+            badge: `${SITIO}badge-72.png`,
+            tag: folio,
+            renotify: true,
+            vibrate: [200, 100, 200]
+          },
+          fcmOptions: { link: `${SITIO}?folio=${encodeURIComponent(folio)}` }
+        }
       });
+  fcmOptions: { link: `${SITIO}?folio=${encodeURIComponent(folio)}` }
+      }
     } catch (e) {
       if (TOKEN_INVALIDO.includes(e.code)) {
         await ref.update({ fcmToken: admin.firestore.FieldValue.delete() });

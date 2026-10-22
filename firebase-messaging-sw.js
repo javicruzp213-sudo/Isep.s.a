@@ -7,12 +7,12 @@ importScripts(
 );
 
 firebase.initializeApp({
-  apiKey: "TU_FIREBASE_API_KEY",
-  authDomain: "TU_PROYECTO.firebaseapp.com",
-  projectId: "TU_PROJECT_ID",
-  storageBucket: "TU_PROYECTO.appspot.com",
-  messagingSenderId: "TU_MESSAGING_SENDER_ID",
-  appId: "TU_FIREBASE_APP_ID"
+  apiKey: "AIzaSyBQ3ojcGtxCkd8zWTFz3Z-bXZux4kU8VrU",
+  authDomain: "isep-e7efe.firebaseapp.com",
+  projectId: "isep-e7efe",
+  storageBucket: "isep-e7efe.firebasestorage.app",
+  messagingSenderId: "838801875419",
+  appId: "1:838801875419:web:abef6e9fb2f0f7bcd907fe"
 });
 
 const messaging = firebase.messaging();
@@ -20,7 +20,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log("Notificación recibida:", payload);
 
-  // Firebase puede mostrar automáticamente las
+  // Firebase muestra automáticamente las
   // notificaciones que incluyen un payload notification.
   // Este manejador se reserva para datos personalizados.
 });

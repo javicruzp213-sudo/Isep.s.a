@@ -1,0 +1,2305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISEP.S.A | Panel del técnico</title>
+
+<!-- CSS y JS de Leaflet integrados -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+<style>
+:root{--ink:#10233f;--ink2:#1d3a63;--amber:#ffb400;--amber2:#e39e00;--bg:#eceff4;--card:#fff;--line:#d6dce6;--soft:#f5f7fa;--muted:#58677c;--ok:#0a7a3d;--bad:#b3261e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Avenir Next","Segoe UI",Roboto,system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.4;-webkit-tap-highlight-color:transparent}
+.hidden{display:none!important}
+button{border:0;cursor:pointer;font:inherit;font-weight:700}
+button:focus-visible,input:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+
+/* ACCESO Y VERIFICACIÓN */
+#loginScreen,#verifScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:linear-gradient(180deg,var(--ink) 0,var(--ink) 38%,var(--bg) 38%)}
+.login-box{width:100%;max-width:410px;background:var(--card);border-radius:18px;padding:30px 26px;box-shadow:0 18px 50px rgba(16,35,63,.28)}
+#verifScreen .login-box{max-width:460px}
+.logo,.header-logo{background:var(--ink);color:var(--amber);font-weight:900;letter-spacing:1.5px;display:flex;align-items:center;justify-content:center}
+.logo{width:96px;height:48px;border-radius:12px;font-size:20px;margin:0 auto 16px;border-bottom:4px solid var(--amber)}
+.login-box h1{text-align:center;font-size:27px;letter-spacing:.3px;margin-bottom:4px}
+.login-box p{text-align:center;color:var(--muted);font-size:14px;margin-bottom:24px}
+.field{margin-bottom:15px}
+.field label{display:block;color:var(--ink);font-size:13px;font-weight:700;margin-bottom:6px}
+.field input{width:100%;background:var(--soft);border:1.5px solid var(--line);border-radius:11px;color:var(--ink);padding:13px;font-size:15px;outline:none}
+.field input:focus{border-color:var(--ink);background:#fff}
+.field input[type=file]{padding:10px;font-size:12px}
+.field small{display:block;color:var(--muted);font-size:12px;margin-top:5px}
+.btn{width:100%;padding:14px;border-radius:12px;margin-top:6px;font-size:15px}
+.btn-primary{background:var(--amber);color:var(--ink)}
+.btn-primary:hover{background:var(--amber2)}
+.btn:disabled{opacity:.55;cursor:wait}
+.error{background:#fdecea;border:1px solid #f2b8b5;color:var(--bad);padding:11px;border-radius:10px;font-size:13px;margin-bottom:15px}
+.skiplink{display:block;width:100%;background:none;color:var(--ink2);font-size:13px;font-weight:600;text-decoration:underline;margin-top:12px;padding:8px}
+.verif-note{background:#e8f4ee;border:1px solid #b6dcc8;color:#0b5c37!important;border-radius:10px;padding:10px 12px;font-size:12px!important;text-align:left!important;margin:4px 0 14px!important;line-height:1.5}
+.verif-ok{background:#e8f4ee;border:1px solid #b6dcc8;color:#0b5c37;border-radius:12px;padding:16px;font-size:14px;line-height:1.55;text-align:center;margin-bottom:6px}
+
+/* AVISO DE PRIVACIDAD, TÉRMINOS Y PERMISOS */
+#legalScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:linear-gradient(180deg,var(--ink) 0,var(--ink) 30%,var(--bg) 30%)}
+#legalScreen .login-box{max-width:720px;padding:24px 22px}
+#legalScreen .login-box p{margin-bottom:14px}
+.legal-scroll{height:52vh;min-height:280px;overflow-y:auto;background:var(--soft);border:1.5px solid var(--line);border-radius:12px;padding:16px 18px;font-size:13px;line-height:1.6;color:#24344d;-webkit-overflow-scrolling:touch}
+.legal-scroll h2{font-size:15px;margin:18px 0 6px;color:var(--ink);border-bottom:2px solid var(--amber);padding-bottom:4px}
+.legal-scroll h2:first-child{margin-top:0}
+.legal-scroll h3{font-size:13px;margin:12px 0 4px;color:var(--ink2)}
+.legal-scroll p{text-align:left;font-size:13px;color:#24344d;margin:0 0 9px}
+.legal-scroll ul{margin:0 0 9px 20px}
+.legal-scroll li{margin-bottom:4px}
+.legal-scroll mark{background:#fff1d6;color:#7a4b00;padding:0 3px;border-radius:3px}
+.legal-hint{text-align:center!important;font-size:12px!important;font-weight:700;color:var(--bad)!important;margin:10px 0 8px!important}
+.legal-hint.ok{color:var(--ok)!important}
+.legal-checks{margin-top:6px}
+.legal-check{display:flex;align-items:flex-start;gap:10px;background:var(--soft);border:1.5px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px;font-size:13px;line-height:1.45;color:var(--ink);cursor:pointer}
+.legal-check input{width:20px;height:20px;flex:none;margin-top:1px;accent-color:var(--ink)}
+.legal-checks.locked .legal-check{opacity:.5;cursor:not-allowed}
+
+/* ESTRUCTURA */
+#app{min-height:100vh}
+header{height:64px;background:var(--ink);border-bottom:4px solid var(--amber);display:flex;align-items:center;justify-content:space-between;padding:0 16px;position:sticky;top:0;z-index:1000}
+.header-left{display:flex;align-items:center;gap:12px}
+.header-logo{height:36px;padding:0 11px;border-radius:9px;font-size:15px;background:#0a172b}
+.header-title strong{display:block;font-size:16px;color:#fff;letter-spacing:.3px}
+.header-title span{display:block;color:#9fb2cc;font-size:11px;margin-top:1px}
+.header-actions{display:flex;gap:8px}
+.logout{background:transparent;color:#fff;border:1.5px solid #3f5a82;padding:9px 13px;border-radius:9px;font-size:12px}
+.logout:hover{background:#1d3a63}
+main{max-width:1180px;margin:auto;padding:16px}
+.top-grid{display:grid;grid-template-columns:1fr 1.5fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.card-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.card-title h2{font-size:17px}
+.card-title small{color:var(--muted);font-size:12px;font-weight:600}
+
+/* ESTADO DEL TÉCNICO */
+.status-card{text-align:left}
+.status-text{display:flex;align-items:center;gap:10px;font-size:26px;font-weight:800;margin-bottom:4px}
+.status-dot{width:16px;height:16px;flex:none;border-radius:50%;background:#8a96a8;box-shadow:0 0 0 4px rgba(16,35,63,.1)}
+.status-sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.status-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.status-btn{padding:16px 8px;background:var(--soft);color:var(--ink);border:1.5px solid var(--line);border-radius:12px;font-size:14px}
+.status-btn:hover{border-color:var(--ink2)}
+.status-btn.active{background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:inset 0 -4px 0 var(--amber)}
+
+/* GPS */
+.gps-box{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:14px}
+.gps-line{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px dashed var(--line)}
+.gps-line:last-of-type{border-bottom:0}
+.gps-line span:first-child{color:var(--muted)}
+.gps-line span:last-child{font-weight:600}
+.gps-indicator{font-weight:800!important}
+.gps-on{color:var(--ok)!important}
+.gps-off{color:var(--bad)!important}
+.gps-btn{width:100%;padding:12px;border-radius:10px;margin-top:10px;background:var(--ink);color:#fff;font-size:14px}
+.connection{text-align:center;color:var(--muted);font-size:12px;margin-top:10px}
+
+/* SERVICIO */
+.no-service{text-align:center;padding:34px 10px;color:var(--muted);font-size:14px}
+.service-row{display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid var(--line)}
+.service-row:last-child{border-bottom:0}
+.service-label{color:var(--muted);font-size:12px;font-weight:600}
+.service-value{text-align:right;font-size:14px;max-width:68%;word-break:break-word}
+.folio{font-size:22px;font-weight:900;letter-spacing:.5px}
+.badge{display:inline-block;padding:5px 10px;border-radius:20px;background:#dfe6f0;color:var(--ink);font-size:12px;font-weight:700}
+.urgent{background:#fff1d6;border:1.5px solid var(--amber);color:#7a4b00;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:800;margin-bottom:10px;text-align:center}
+
+/* ACCIONES */
+.action-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.action-btn{padding:14px 8px;border-radius:12px;background:#fff;color:var(--ink);border:1.5px solid var(--ink);font-size:13px}
+.action-btn:hover{background:var(--soft)}
+.action-btn.primary{background:var(--amber);border-color:var(--amber);color:var(--ink)}
+.action-btn.primary:hover{background:var(--amber2)}
+.action-btn.danger{background:#fff;color:var(--bad);border-color:var(--bad)}
+.action-btn:disabled{opacity:.4;cursor:not-allowed}
+.action-btn.route,.action-btn.next{width:100%;padding:18px;font-size:17px;margin-bottom:10px}
+.action-btn.route{background:var(--ink);color:#fff;margin-bottom:6px}
+.action-btn.route:hover{background:var(--ink2)}
+.action-btn.next{background:var(--amber);border-color:var(--amber);color:var(--ink)}
+.route-note{display:block;margin-bottom:10px;color:var(--muted);text-align:center;font-size:12px}
+
+/* MAPA */
+#map{width:100%;height:60vh;min-height:360px;border-radius:12px;overflow:hidden}
+.map-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.map-btn{background:#fff;color:var(--ink);border:1.5px solid var(--ink);border-radius:11px;padding:14px 12px;font-size:14px;flex:1;min-width:46%}
+.map-btn:hover{background:var(--soft)}
+.map-btn.nav{background:var(--amber);border-color:var(--amber)}
+#mapCard{display:none!important}
+#mapCard.full{position:fixed;inset:0;z-index:2000;margin:0;border-radius:0;display:flex!important;flex-direction:column;overflow:auto}
+#mapCard.full #map{flex:1;height:auto;border-radius:0}
+
+/* VENTANAS (PIN, PERFIL, COBRO) */
+.modal{position:fixed;inset:0;background:rgba(10,23,43,.7);z-index:6000;display:flex;align-items:center;justify-content:center;padding:18px}
+.modal-box{width:100%;max-width:390px;max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:22px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.modal-box h3{font-size:19px;margin-bottom:8px}
+.modal-box p{color:var(--muted);font-size:13px;line-height:1.5;margin-bottom:14px}
+#pinInput{width:100%;background:var(--soft);border:2px solid var(--line);border-radius:12px;color:var(--ink);padding:14px;font-size:30px;letter-spacing:14px;text-align:center;outline:none;font-family:ui-monospace,Consolas,monospace}
+#pinInput:focus{border-color:var(--ink)}
+.pin-error{background:#fdecea;border:1px solid #f2b8b5;color:var(--bad);padding:10px;border-radius:10px;font-size:13px;margin-top:12px}
+.modal-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.plabel{display:block;color:var(--ink);font-size:12px;font-weight:700;margin:12px 0 6px}
+.pfield{width:100%;background:var(--soft);border:1.5px solid var(--line);border-radius:12px;color:var(--ink);padding:13px;font-size:15px;outline:none}
+.pfield:focus{border-color:var(--ink);background:#fff}
+.payopt{display:flex;align-items:center;gap:10px;background:var(--soft);border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;font-size:14px;color:var(--ink)}
+.payopt input{width:18px;height:18px;margin:0;accent-color:var(--ink)}
+
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;border-left:5px solid var(--amber);padding:12px 18px;border-radius:10px;font-size:14px;font-weight:700;z-index:7000;box-shadow:0 10px 30px rgba(10,23,43,.4);max-width:92vw}
+
+@media(max-width:850px){.top-grid{grid-template-columns:1fr}#map{height:55vh}}
+@media(max-width:500px){main{padding:10px}.card{padding:14px}header{padding:0 10px}.logout{padding:8px 9px}.header-title strong{font-size:14px}.status-text{font-size:22px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+<meta name="theme-color" content="#10233f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<style>
+#isepNet{position:fixed;left:0;right:0;top:0;z-index:2147483000;padding:calc(8px + env(safe-area-inset-top,0px)) 12px 8px;text-align:center;font:600 13px system-ui,sans-serif;background:#b3261e;color:#fff;transform:translateY(-110%);transition:transform .25s}#isepNet.show{transform:none}#isepNet.ok{background:#0a7a3d}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<section id="loginScreen">
+    <div class="login-box">
+        <div class="logo">ISEP</div>
+        <h1>ISEP.S.A</h1>
+        <p>Panel del técnico</p>
+        <div id="loginError" class="error hidden"></div>
+        <div class="field">
+            <label>Correo electrónico</label>
+            <input type="email" id="email" autocomplete="username" placeholder="tecnico@ejemplo.com">
+        </div>
+        <div class="field">
+            <label>Contraseña</label>
+            <input type="password" id="password" autocomplete="current-password" placeholder="Contraseña">
+        </div>
+        <button class="btn btn-primary" id="loginBtn">Iniciar sesión</button>
+        <button type="button" id="forgotBtn" class="skiplink">¿Olvidaste tu contraseña?</button>
+    </div>
+</section>
+
+<!-- AVISO DE PRIVACIDAD, TÉRMINOS Y CONDICIONES, PERMISOS (obligatorio antes de usar el panel o enviar documentos) -->
+<section id="legalScreen" class="hidden">
+    <div class="login-box">
+        <div class="logo">ISEP</div>
+        <h1>Privacidad y términos</h1>
+        <p>Lee con atención todo el documento. Para continuar debes llegar hasta el final y aceptar cada punto.</p>
+        <div id="legalError" class="error hidden"></div>
+
+        <div class="legal-scroll" id="legalScroll" tabindex="0" aria-label="Aviso de privacidad, términos y condiciones y permisos">
+
+<h2>PARTE 1 · AVISO DE PRIVACIDAD INTEGRAL PARA TÉCNICOS</h2>
+<p><strong>Versión 2026-10-22.</strong> En cumplimiento de la Ley Federal de Protección de Datos Personales en Posesión de los Particulares (LFPDPPP), su Reglamento y demás disposiciones aplicables en México, ISEP, S.A. (en adelante «ISEP», «nosotros» o «la Empresa») pone a tu disposición este aviso de privacidad.</p>
+
+<h3>1. Identidad y domicilio del responsable</h3>
+<p>ISEP, S.A., con domicilio en <mark>[completar: calle, número, colonia, municipio, estado y C.P. de ISEP, S.A.]</mark>, es la responsable del tratamiento de tus datos personales. Para cualquier asunto relacionado con tus datos puedes escribir a <mark>[completar: correo de privacidad, por ejemplo privacidad@tudominio.com]</mark>.</p>
+
+<h3>2. Datos personales que recabamos</h3>
+<p>Para registrarte, verificarte, asignarte servicios, pagarte y proteger a los clientes y a la Empresa, podemos recabar las siguientes categorías de datos:</p>
+<ul>
+<li><strong>Datos de identificación:</strong> nombre completo, CURP, fotografía de tu rostro, copia del frente y reverso de tu credencial para votar (INE) y la información que aparece en ella.</li>
+<li><strong>Datos de contacto:</strong> correo electrónico, número telefónico y, en su caso, enlace a tu foto de perfil.</li>
+<li><strong>Datos de domicilio:</strong> comprobante de domicilio y la dirección que contiene.</li>
+<li><strong>Datos patrimoniales y financieros:</strong> tu CLABE interbancaria, necesaria para depositar tus pagos, así como los montos cobrados, formas de pago y comprobantes de los servicios que realices.</li>
+<li><strong>Datos de tu vehículo:</strong> modelo, color y placas, cuando los captures en tu perfil.</li>
+<li><strong>Datos de geolocalización:</strong> latitud, longitud, precisión y hora de tu ubicación, estado del GPS, y la trayectoria (recorrido) que realizas mientras tienes un servicio asignado.</li>
+<li><strong>Datos operativos:</strong> servicios asignados, estatus (disponible, en camino, en servicio, finalizado), horarios de salida, llegada y cierre, PIN de validación, calificaciones, incidencias y garantías.</li>
+<li><strong>Datos técnicos:</strong> tipo de dispositivo y navegador, dirección IP, fecha y hora de acceso y de aceptación de este documento.</li>
+</ul>
+<p><strong>Datos personales sensibles.</strong> Tu fotografía facial y los documentos de identidad pueden permitir identificarte de manera única; los tratamos con medidas reforzadas de seguridad y solo para las finalidades de verificación descritas abajo. No solicitamos datos sobre tu salud, origen étnico, religión, afiliación política ni vida sexual. Si por error nos los proporcionas, serán eliminados.</p>
+
+<h3>3. Finalidades del tratamiento</h3>
+<p><strong>Finalidades necesarias</strong> (sin ellas no podemos darte acceso al panel):</p>
+<ul>
+<li>Verificar tu identidad y tu domicilio y validar que eres la persona que dice ser.</li>
+<li>Crear, administrar y mantener tu cuenta de técnico.</li>
+<li>Asignarte servicios, mostrarte los datos del cliente y la ruta, y permitirte confirmar, iniciar y finalizar servicios.</li>
+<li>Compartir con el cliente tu nombre, teléfono, vehículo, foto, PIN de seguridad y tu ubicación en tiempo real mientras vas en camino a su domicilio.</li>
+<li>Compartir tu ubicación, estado y recorrido con el personal de Logística y Administración para coordinar, supervisar y dar seguridad a la operación.</li>
+<li>Calcular, registrar y depositar tus pagos a la CLABE que nos proporcionaste.</li>
+<li>Atender garantías, quejas, aclaraciones, siniestros, daños y disputas relacionadas con los servicios.</li>
+<li>Prevenir fraudes, suplantación de identidad, robos o conductas contrarias a las políticas de la Empresa.</li>
+<li>Cumplir obligaciones legales, fiscales y requerimientos de autoridades competentes.</li>
+</ul>
+<p><strong>Finalidades secundarias</strong> (puedes oponerte a ellas en cualquier momento escribiendo al correo indicado, sin que eso afecte tu cuenta): enviarte avisos operativos adicionales, encuestas de calidad, capacitación y mejoras del servicio; elaborar estadísticas internas con información disociada o anonimizada.</p>
+
+<h3>4. Transferencias y remisiones de datos</h3>
+<p>Para operar la plataforma utilizamos proveedores tecnológicos que actúan por cuenta de ISEP (remisión), como servicios de autenticación, base de datos y alojamiento en la nube (Google Firebase / Google Cloud y Vercel), servicios de mapas y rutas (OpenStreetMap, OSRM y Google Maps cuando decides navegar con esa aplicación), servicios de notificaciones y, en su caso, procesadores de pago con tarjeta (Stripe). Estos proveedores pueden almacenar o procesar datos en servidores ubicados fuera de México, bajo sus propias medidas de seguridad y políticas de privacidad.</p>
+<p>Además, comunicaremos tus datos a: (a) el cliente al que atiendes, únicamente los datos descritos en el punto 3; (b) autoridades judiciales, fiscales o administrativas cuando lo exija la ley o una orden fundada y motivada; (c) instituciones bancarias para realizar tus depósitos; y (d) aseguradoras o asesores legales cuando sea indispensable para atender un siniestro o controversia. Fuera de estos casos no vendemos ni cedemos tus datos a terceros.</p>
+
+<h3>5. Medidas de seguridad</h3>
+<p>Aplicamos medidas administrativas, técnicas y físicas razonables para proteger tus datos contra daño, pérdida, alteración, destrucción o uso no autorizado. Entre ellas: autenticación con contraseña, reglas de acceso para que tus documentos y tu CLABE solo puedan ser consultados por Administración, comunicaciones cifradas y eliminación de los documentos de tu pantalla una vez enviados. Ningún sistema es infalible; si ocurre una vulneración que afecte de forma significativa tus derechos, te lo notificaremos sin dilación.</p>
+
+<h3>6. Tus derechos ARCO, revocación y limitación de uso</h3>
+<p>Tienes derecho a <strong>Acceder</strong> a tus datos, <strong>Rectificarlos</strong> si son inexactos, <strong>Cancelarlos</strong> cuando consideres que no se requieren para las finalidades señaladas u oponerte a su tratamiento (<strong>Oposición</strong>), así como a revocar tu consentimiento y limitar el uso o divulgación de tus datos. Para ejercerlos envía una solicitud a <mark>[completar: correo de privacidad]</mark> con: tu nombre y medio para responderte, copia de una identificación oficial, la descripción clara de los datos y del derecho que deseas ejercer, y cualquier elemento que facilite localizar la información. Responderemos en un plazo máximo de 20 días hábiles y, si procede, haremos efectiva la solicitud dentro de los 15 días hábiles siguientes.</p>
+<p>La cancelación o revocación no procede mientras exista una obligación legal o contractual de conservar los datos (por ejemplo, registros fiscales, servicios con garantía vigente o una controversia en curso). Revocar tu consentimiento para las finalidades necesarias implicará que ya no puedas operar como técnico de ISEP.</p>
+
+<h3>7. Conservación</h3>
+<p>Conservaremos tus datos mientras tu cuenta esté activa y, después, durante el tiempo necesario para cumplir obligaciones legales, fiscales, de garantía y de defensa ante posibles reclamaciones (por regla general, hasta cinco años posteriores a la terminación de tu relación con la Empresa, salvo que la ley exija un plazo distinto). Concluido el plazo, se bloquearán y suprimirán de forma segura.</p>
+
+<h3>8. Cookies y tecnologías similares</h3>
+<p>El panel puede usar almacenamiento local del navegador y mecanismos de sesión para mantenerte autenticado y recordar preferencias. Puedes borrar estos datos desde tu navegador, pero eso puede obligarte a iniciar sesión de nuevo.</p>
+
+<h3>9. Cambios al aviso</h3>
+<p>Podemos modificar este aviso por cambios legales, operativos o tecnológicos. Cuando haya una nueva versión te la mostraremos en este panel y deberás aceptarla para seguir trabajando. La versión vigente es la indicada al inicio de este documento.</p>
+
+<h3>10. Autoridad</h3>
+<p>Si consideras que tu derecho a la protección de datos ha sido vulnerado, puedes acudir ante la autoridad de protección de datos personales competente conforme a la legislación mexicana vigente.</p>
+
+<h2>PARTE 2 · PERMISOS QUE ACEPTAS OTORGAR</h2>
+<p>Al aceptar este documento autorizas expresamente a ISEP y al dispositivo que utilizas lo siguiente:</p>
+<h3>A. Ubicación (GPS)</h3>
+<ul>
+<li>El panel solicitará permiso de ubicación a tu navegador y, una vez concedido, <strong>registrará tu posición en tiempo real</strong> mientras tengas la sesión abierta y el GPS activado.</li>
+<li>Tu ubicación, precisión, hora y estado se guardan en tu ficha de técnico y son visibles para Logística y Administración.</li>
+<li>Cuando tienes un servicio en estatus «En camino», tu ubicación también es visible para el cliente de ese servicio, así como su ruta estimada.</li>
+<li>Se guarda la <strong>trayectoria</strong> de tu recorrido asociada al folio del servicio, con fines de seguridad, aclaraciones y control de calidad.</li>
+<li>Puedes desactivar el GPS desde el botón «Desactivar GPS» o desde los ajustes de tu dispositivo. Sin GPS activo no podrás ser asignado a servicios ni el cliente podrá verte, y Logística podrá considerarte no disponible.</li>
+<li>Es tu responsabilidad cerrar sesión al terminar tu jornada para que se deje de registrar tu ubicación.</li>
+</ul>
+<h3>B. Cámara, archivos y documentos</h3>
+<ul>
+<li>Autorizas que el panel acceda a las fotos o archivos que selecciones voluntariamente para tu verificación (INE, comprobante de domicilio y foto de tu rostro).</li>
+<li>Las imágenes se comprimen en tu dispositivo, se envían a la base de datos de ISEP y solo Administración puede consultarlas. Tras enviarlas dejan de mostrarse en tu pantalla.</li>
+<li>Declaras que los documentos son auténticos, vigentes y te pertenecen. Presentar documentos falsos o ajenos es causa de baja inmediata y puede constituir un delito.</li>
+</ul>
+<h3>C. Datos bancarios</h3>
+<ul>
+<li>Autorizas que ISEP use tu CLABE exclusivamente para depositar los pagos que te correspondan.</li>
+<li>Es tu responsabilidad capturar una CLABE correcta y a tu nombre. ISEP no responde por depósitos hechos a una CLABE que tú capturaste incorrectamente.</li>
+</ul>
+<h3>D. Contacto y notificaciones</h3>
+<ul>
+<li>Autorizas que el cliente vea tu nombre, teléfono, vehículo y foto para poder llamarte o escribirte por WhatsApp.</li>
+<li>Autorizas que ISEP te contacte por correo, llamada, mensaje o notificación del panel para asuntos operativos, de seguridad y de pago.</li>
+</ul>
+<h3>E. Mapas y navegación</h3>
+<ul>
+<li>Al usar «Mostrar ruta» o «Navegar con Google Maps» se abrirán servicios de terceros que recibirán el destino (y, según el servicio, tu posición). Su uso se rige por las políticas de dichos terceros.</li>
+</ul>
+
+<h2>PARTE 3 · TÉRMINOS Y CONDICIONES DE USO PARA TÉCNICOS</h2>
+
+<h3>1. Objeto y aceptación</h3>
+<p>Estos Términos y Condiciones («Términos») regulan el acceso y uso del Panel del Técnico de ISEP, S.A. Al marcar las casillas de aceptación y pulsar el botón correspondiente, manifiestas que los has leído completos, que los entiendes y que aceptas obligarte por ellos. Tu aceptación queda registrada con fecha, hora y versión, y tiene los mismos efectos que una firma electrónica simple para fines de este documento. Si no estás de acuerdo, no uses el panel y cierra tu sesión.</p>
+
+<h3>2. Requisitos</h3>
+<ul>
+<li>Ser mayor de 18 años y tener capacidad legal para obligarte.</li>
+<li>Contar con la capacitación, experiencia y, en su caso, las certificaciones o permisos que la normatividad exija para realizar trabajos eléctricos y los servicios que aceptes.</li>
+<li>Contar con una identificación oficial vigente, comprobante de domicilio, CLABE a tu nombre y un teléfono celular con datos móviles y GPS.</li>
+<li>Haber sido aprobado por Administración tras la verificación de documentos. ISEP puede aprobar, rechazar o suspender cuentas a su criterio razonable.</li>
+</ul>
+
+<h3>3. Cuenta, contraseña y uso personal</h3>
+<ul>
+<li>Tu cuenta es personal e intransferible. No puedes prestarla, venderla ni permitir que otra persona atienda servicios con tu usuario.</li>
+<li>Eres responsable de la confidencialidad de tu contraseña y de toda actividad realizada con tu cuenta. Avisa de inmediato a ISEP si sospechas un acceso no autorizado.</li>
+<li>La información que captures debe ser veraz, completa y actualizada.</li>
+</ul>
+
+<h3>4. Naturaleza de la relación</h3>
+<p>Salvo que exista por separado un contrato laboral firmado, el uso del panel no crea por sí mismo una relación laboral, de sociedad ni de representación entre tú y ISEP. Las condiciones económicas, de pago y de prestación del servicio se regirán por el acuerdo que tengas con la Empresa. Eres responsable de tus obligaciones fiscales, de seguridad social y de tus propias herramientas, salvo pacto en contrario. <mark>[Revisar esta cláusula con tu asesor legal según el tipo de relación que realmente tengas con tus técnicos.]</mark></p>
+
+<h3>5. Asignación y ejecución de servicios</h3>
+<ul>
+<li>Los servicios se te asignan por el personal de Logística o Administración. Al confirmar un servicio te comprometes a atenderlo en el horario acordado.</li>
+<li>Debes mantener actualizado tu estatus (Disponible, En camino, En servicio, Finalizado) conforme a la realidad. Está prohibido alterar estatus, horarios o ubicaciones para aparentar cumplimiento.</li>
+<li>Debes avanzar el servicio en el orden del panel: confirmar, salir hacia el cliente, validar el PIN al llegar y finalizar. <strong>No debes iniciar un servicio sin que el cliente te proporcione su PIN correcto</strong>, salvo los casos de solicitudes sin PIN que el propio panel permita.</li>
+<li>No debes compartir, solicitar por adelantado ni registrar el PIN del cliente para otro fin.</li>
+<li>Debes presentarte con el nombre y vehículo registrados, de forma puntual, con trato respetuoso y con tu identificación visible.</li>
+<li>Debes realizar el trabajo con la diligencia, técnica y normas de seguridad aplicables (NOM y demás reglas eléctricas vigentes), usar equipo de protección y no realizar trabajos que excedan tu capacidad o que representen un riesgo grave; en ese caso debes suspender y avisar a Logística.</li>
+<li>No puedes subcontratar ni enviar a otra persona en tu lugar sin autorización escrita de ISEP.</li>
+</ul>
+
+<h3>6. Cobros, pagos y comprobantes</h3>
+<ul>
+<li>Debes capturar en el panel el monto real cobrado y la forma de pago. Está prohibido registrar montos distintos a los reales o cobrar al cliente cantidades adicionales no autorizadas.</li>
+<li>Cuando el cliente pague en línea con tarjeta, no debes recibir ese pago por otros medios.</li>
+<li>Cuando recibas dinero en efectivo o transferencia por cuenta de ISEP, deberás reportarlo y entregarlo o liquidarlo conforme a las reglas que la Empresa te indique. La retención indebida de dinero del cliente o de la Empresa es causa de baja y de acciones legales.</li>
+<li>Tus pagos se depositarán a la CLABE registrada, conforme al calendario y reglas acordados. ISEP puede retener o compensar montos por cobros pendientes, daños comprobados, garantías atendidas por tu causa o penalizaciones previamente acordadas.</li>
+</ul>
+
+<h3>7. Garantías</h3>
+<p>Los trabajos pueden estar amparados por una hoja de garantía. Te obligas a respetarla y a corregir sin costo para el cliente los defectos de mano de obra atribuibles a ti dentro del plazo de garantía. Si la hoja de garantía se envía por el panel, debes entregarla al cliente y marcar su entrega.</p>
+
+<h3>8. Conducta prohibida</h3>
+<p>Queda estrictamente prohibido, de manera enunciativa y no limitativa:</p>
+<ul>
+<li>Utilizar el panel para fines ilícitos, fraudulentos o ajenos al servicio.</li>
+<li>Falsear tu identidad, documentos, ubicación, horarios, evidencias o montos.</li>
+<li>Manipular, simular o desactivar el GPS para aparentar una posición distinta; usar aplicaciones de ubicación falsa.</li>
+<li>Captar clientes de ISEP para trabajar «por fuera» durante la vigencia de tu relación y durante los doce meses siguientes respecto de clientes que conociste por medio de ISEP, salvo pacto distinto.</li>
+<li>Copiar, divulgar o usar los datos de los clientes (nombre, teléfono, domicilio, ubicación) para fines distintos al servicio asignado.</li>
+<li>Grabar, fotografiar o publicar el interior del domicilio o a las personas del cliente sin su consentimiento.</li>
+<li>Presentarte bajo los efectos de alcohol, drogas o sustancias que afecten tu capacidad; portar armas; o tener conductas violentas, discriminatorias, de acoso o de hostigamiento hacia clientes, compañeros o personal de ISEP.</li>
+<li>Intentar acceder a información, cuentas o partes del sistema que no te correspondan, o interferir con su funcionamiento, seguridad o disponibilidad.</li>
+<li>Realizar ingeniería inversa, copiar o distribuir el código o el diseño del panel.</li>
+</ul>
+
+<h3>9. Confidencialidad</h3>
+<p>Debes guardar estricta confidencialidad sobre la información de los clientes, precios, procedimientos, rutas, datos del sistema y cualquier información no pública de ISEP a la que tengas acceso. Esta obligación continúa vigente después de terminar tu relación con la Empresa.</p>
+
+<h3>10. Seguridad, accidentes y responsabilidad</h3>
+<ul>
+<li>Eres responsable de tu seguridad personal, de tu vehículo y de tus herramientas. Debes respetar las leyes de tránsito y no usar el teléfono mientras conduces; <strong>no manipules el panel en movimiento</strong>.</li>
+<li>Serás responsable de los daños y perjuicios que causes al cliente, a terceros o a ISEP por dolo, negligencia, imprudencia o incumplimiento de estos Términos, en la medida que la ley permita.</li>
+<li>ISEP no garantiza que el panel esté libre de interrupciones o errores, ni que la señal de GPS o de datos sea continua. El panel se ofrece «tal cual» y «según disponibilidad». ISEP no será responsable por pérdidas derivadas de fallas de internet, del dispositivo, del GPS, de proveedores externos o de causas de fuerza mayor, salvo lo que establezca la ley.</li>
+</ul>
+
+<h3>11. Suspensión y baja</h3>
+<p>ISEP puede suspender o dar de baja tu cuenta, de forma temporal o definitiva, cuando: incumplas estos Términos o el aviso de privacidad; presentes documentos falsos; existan quejas graves o reiteradas; haya riesgo para clientes u otros técnicos; no mantengas tu información vigente; o por inactividad prolongada. Tú puedes solicitar tu baja en cualquier momento por escrito. La baja no te libera de las obligaciones pendientes (confidencialidad, entrega de montos cobrados, garantías en curso, reparación de daños).</p>
+
+<h3>12. Propiedad intelectual</h3>
+<p>El nombre, logotipo, diseño, código, textos y contenidos de ISEP y de este panel son propiedad de la Empresa o de sus licenciantes. Se te concede únicamente una licencia limitada, personal, revocable y no exclusiva para usar el panel mientras tu cuenta esté activa.</p>
+
+<h3>13. Evidencias y monitoreo</h3>
+<p>Aceptas que ISEP conserve y utilice los registros del sistema (estatus, horarios, ubicaciones, trayectorias, PIN validados, montos y mensajes) como evidencia en aclaraciones, auditorías, controversias y procedimientos legales. Los registros electrónicos del sistema serán válidos como medio de prueba entre las partes.</p>
+
+<h3>14. Modificaciones</h3>
+<p>ISEP puede actualizar estos Términos, el aviso de privacidad y los permisos. Cuando haya una nueva versión, el panel te pedirá aceptarla de nuevo; si no la aceptas, no podrás seguir usándolo. El uso continuado tras una actualización, una vez aceptada, constituye tu conformidad.</p>
+
+<h3>15. Divisibilidad y no renuncia</h3>
+<p>Si alguna disposición de estos Términos resultara inválida o inaplicable, el resto seguirá vigente. La falta de ejercicio de un derecho por parte de ISEP no implica renuncia al mismo.</p>
+
+<h3>16. Legislación aplicable y jurisdicción</h3>
+<p>Estos Términos se rigen por las leyes de los Estados Unidos Mexicanos. Para su interpretación y cumplimiento, las partes se someten a los tribunales competentes de <mark>[completar: ciudad y estado]</mark>, renunciando a cualquier otro fuero que pudiera corresponderles por sus domicilios presentes o futuros.</p>
+
+<h3>17. Contacto</h3>
+<p>Para dudas sobre estos Términos, escribe a <mark>[completar: correo de contacto de ISEP]</mark>.</p>
+
+<h2>PARTE 4 · DECLARACIONES FINALES</h2>
+<ul>
+<li>Declaro que los datos y documentos que proporciono son verdaderos y me pertenecen.</li>
+<li>Declaro que leí completo el aviso de privacidad, los permisos y los términos y condiciones, y que tuve oportunidad de aclarar mis dudas.</li>
+<li>Otorgo mi consentimiento libre, específico, informado e inequívoco para el tratamiento de mis datos personales, incluidos los datos de ubicación, los documentos de identidad, la fotografía de mi rostro y mis datos financieros, para las finalidades necesarias descritas.</li>
+<li>Entiendo que puedo ejercer mis derechos ARCO y revocar mi consentimiento conforme al aviso de privacidad.</li>
+</ul>
+<p><strong>Has llegado al final del documento.</strong> Ahora puedes marcar las casillas de aceptación.</p>
+        </div>
+
+        <p id="legalHint" class="legal-hint">Desplázate hasta el final del documento para poder aceptar ↓</p>
+
+        <div id="legalChecks" class="legal-checks locked">
+            <label class="legal-check"><input type="checkbox" id="lgTerm" disabled> <span>He leído y acepto los <strong>Términos y Condiciones de uso</strong> para técnicos.</span></label>
+            <label class="legal-check"><input type="checkbox" id="lgPriv" disabled> <span>He leído y acepto el <strong>Aviso de Privacidad</strong> y consiento el tratamiento de mis datos personales, incluidos mis datos de identidad y financieros.</span></label>
+            <label class="legal-check"><input type="checkbox" id="lgGps" disabled> <span>Autorizo el uso de mi <strong>ubicación en tiempo real y la trayectoria</strong> de mis recorridos, y que la vean Logística, Administración y el cliente cuando voy en camino.</span></label>
+            <label class="legal-check"><input type="checkbox" id="lgDocs" disabled> <span>Autorizo el envío y resguardo de mis <strong>documentos (INE, comprobante de domicilio, foto de rostro) y CLABE</strong> para mi verificación y mis pagos.</span></label>
+            <label class="legal-check"><input type="checkbox" id="lgCom" disabled> <span>Autorizo que el cliente vea mi <strong>nombre, teléfono, vehículo y foto</strong>, y que ISEP me contacte por motivos operativos.</span></label>
+        </div>
+
+        <button class="btn btn-primary" id="legalAccept" type="button" disabled>Acepto y continuar</button>
+        <button type="button" class="skiplink" id="legalDecline">No acepto · cerrar sesión</button>
+    </div>
+</section>
+
+<!-- VERIFICACIÓN DE DOCUMENTOS (el técnico los envía una sola vez y ya no se le vuelven a mostrar) -->
+<section id="verifScreen" class="hidden">
+    <div class="login-box">
+        <div class="logo">ISEP</div>
+        <h1 id="verifTitle">Verificación</h1>
+        <p id="verifIntro">Para trabajar con ISEP.S.A necesitamos verificar tu identidad.</p>
+        <div id="verifError" class="error hidden"></div>
+        <div id="verifForm">
+            <div class="field"><label for="vNombre">Nombre completo</label><input id="vNombre" type="text" autocomplete="off" maxlength="80" placeholder="Nombre y apellidos"></div>
+            <div class="field"><label for="vCurp">CURP</label><input id="vCurp" type="text" autocomplete="off" maxlength="18" style="text-transform:uppercase" placeholder="18 caracteres"></div>
+            <div class="field"><label for="vClabe">CLABE interbancaria (18 dígitos)</label><input id="vClabe" type="text" inputmode="numeric" autocomplete="off" maxlength="22" placeholder="000000000000000000"><small>Aquí se depositarán tus pagos.</small></div>
+            <div class="field"><label for="vIneF">INE · frente</label><input id="vIneF" type="file" accept="image/*"><small id="vIneFInfo"></small></div>
+            <div class="field"><label for="vIneR">INE · reverso</label><input id="vIneR" type="file" accept="image/*"><small id="vIneRInfo"></small></div>
+            <div class="field"><label for="vDom">Comprobante de domicilio</label><input id="vDom" type="file" accept="image/*"><small id="vDomInfo"></small></div>
+            <div class="field"><label for="vRostro">Foto de tu rostro</label><input id="vRostro" type="file" accept="image/*"><small id="vRostroInfo"></small></div>
+            <p class="verif-note">🔒 Tus documentos y tu CLABE solo los puede ver administración. Cuando los envíes, desaparecen de esta pantalla y no se vuelven a mostrar.</p>
+            <button class="btn btn-primary" id="vSend" type="button">Enviar verificación</button>
+        </div>
+        <div id="verifDone" class="hidden"><div class="verif-ok">✔ Tus documentos fueron enviados.<br>Por tu privacidad ya no se muestran aquí. Administración los revisará y podrás entrar en cuanto te aprueben.</div></div>
+        <button type="button" class="skiplink" id="verifLogout">Cerrar sesión</button>
+    </div>
+</section>
+
+<!-- APP -->
+<section id="app" class="hidden">
+<header>
+    <div class="header-left">
+        <div class="header-logo">ISEP</div>
+        <div class="header-title">
+            <strong>ISEP.S.A</strong>
+            <span>Panel del técnico</span>
+        </div>
+    </div>
+    <div class="header-actions">
+        <button class="logout" id="profileBtn">Mi perfil</button>
+        <button class="logout" id="logoutBtn">Cerrar sesión</button>
+    </div>
+</header>
+
+<main>
+    <div class="top-grid">
+        <!-- STATUS -->
+        <div>
+            <div class="card status-card">
+                <div class="card-title">
+                    <h2>Estado</h2>
+                    <small id="technicianName">Técnico</small>
+                </div>
+                <div class="status-text">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span id="statusText">Desconectado</span>
+                </div>
+                <div class="status-sub" id="statusSub">Esperando conexión GPS</div>
+                <div class="status-buttons">
+                    <button class="status-btn" data-status="disponible">Disponible</button>
+                    <button class="status-btn" data-status="en camino">En camino</button>
+                    <button class="status-btn" data-status="en servicio">En servicio</button>
+                    <button class="status-btn" data-status="finalizado">Finalizado</button>
+                </div>
+                <div class="gps-box">
+                    <div class="gps-line">
+                        <span>GPS</span>
+                        <span id="gpsStatus" class="gps-indicator gps-off">Desactivado</span>
+                    </div>
+                    <div class="gps-line">
+                        <span>Latitud</span>
+                        <span id="gpsLat">—</span>
+                    </div>
+                    <div class="gps-line">
+                        <span>Longitud</span>
+                        <span id="gpsLng">—</span>
+                    </div>
+                    <div class="gps-line">
+                        <span>Precisión</span>
+                        <span id="gpsAccuracy">—</span>
+                    </div>
+                    <div class="gps-line">
+                        <span>Última actualización</span>
+                        <span id="gpsTime">—</span>
+                    </div>
+                    <button class="gps-btn" id="gpsBtn">Activar GPS</button>
+                </div>
+                <div class="connection" id="connectionText">Sin conexión con Firebase</div>
+                <div class="connection">Ubicación, estado y recorrido visibles en Logística.</div>
+            </div>
+        </div>
+
+        <!-- SERVICE -->
+        <div>
+            <div class="card">
+                <div class="card-title">
+                    <h2>Servicio asignado</h2>
+                    <small id="serviceState">Sin servicio</small>
+                </div>
+                <div id="serviceContent">
+                    <div class="no-service">No tienes un servicio asignado actualmente.</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">
+                    <h2>Acciones</h2>
+                </div>
+                <button class="action-btn route" id="routeBtn" disabled>Mostrar ruta</button>
+                <small id="routeNote" class="route-note"></small>
+                <button class="action-btn primary next" id="nextBtn" disabled>Sin servicio</button>
+                <div class="action-grid">
+                    <button class="action-btn" id="confirmBtn" disabled>Confirmar servicio</button>
+                    <button class="action-btn" id="clientBtn" disabled>Información del cliente</button>
+                    <button class="action-btn" id="arrivedBtn" disabled>Llegué · validar PIN</button>
+                    <button class="action-btn danger" id="finishBtn" disabled>Finalizar servicio</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAP -->
+    <div class="card" id="mapCard">
+        <div class="card-title">
+            <h2>Mapa</h2>
+            <small id="mapStatus">Esperando ubicación</small>
+        </div>
+        <div id="map"></div>
+        <div class="map-actions">
+            <button class="map-btn" id="centerTechnicianBtn">Mi ubicación</button>
+            <button class="map-btn" id="centerClientBtn" disabled>Cliente</button>
+            <button class="map-btn nav" id="navBtn">Navegar con Google Maps</button>
+            <button class="map-btn" id="fullBtn">Pantalla completa</button>
+        </div>
+    </div>
+</main>
+</section>
+
+<!-- VALIDAR PIN DEL CLIENTE -->
+<div id="pinModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+    <div class="modal-box">
+        <h3 id="pinTitle">Validar PIN del cliente</h3>
+        <p>Pídele al cliente su código de seguridad de 4 dígitos. Lo ve en su pantalla de rastreo mientras vas en camino.</p>
+        <input id="pinInput" type="tel" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" placeholder="••••">
+        <div id="pinError" class="pin-error hidden"></div>
+        <div class="modal-actions">
+            <button type="button" class="action-btn" id="pinCancel">Cancelar</button>
+            <button type="button" class="action-btn primary" id="pinOk">Validar e iniciar</button>
+        </div>
+    </div>
+</div>
+
+<!-- MI PERFIL (lo ve el cliente cuando te asignan un servicio) -->
+<div id="profileModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+    <div class="modal-box">
+        <h3 id="profileTitle">Mi perfil</h3>
+        <p>Esta información la ve el cliente cuando te asignan un servicio. Con tu teléfono podrá llamarte o escribirte por WhatsApp cuando vayas en camino.</p>
+        <label class="plabel" for="profTel">Teléfono (10 dígitos)</label>
+        <input id="profTel" class="pfield" type="tel" inputmode="numeric" autocomplete="tel" placeholder="2211234567">
+        <label class="plabel" for="profVeh">Vehículo (modelo, color, placas)</label>
+        <input id="profVeh" class="pfield" type="text" maxlength="80" placeholder="Nissan NP300 blanca · Placas ABC-123">
+        <label class="plabel" for="profFoto">Foto (enlace https, opcional)</label>
+        <input id="profFoto" class="pfield" type="url" placeholder="https://...">
+        <div id="profError" class="pin-error hidden"></div>
+        <div class="modal-actions">
+            <button type="button" class="action-btn" id="profCancel">Cancelar</button>
+            <button type="button" class="action-btn primary" id="profSave">Guardar</button>
+        </div>
+    </div>
+</div>
+
+<!-- COBRO DEL SERVICIO -->
+<div id="cobroModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cobroTitle">
+    <div class="modal-box">
+        <h3 id="cobroTitle">Cobro del servicio</h3>
+        <p>Captura cuánto cobraste. El cliente verá este monto en su pantalla de seguimiento.</p>
+        <label class="plabel" for="cobMonto">Monto total (MXN)</label>
+        <input id="cobMonto" class="pfield" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+        <label class="plabel">¿Cómo paga el cliente?</label>
+        <label class="payopt"><input type="radio" name="cobModo" value="ya" checked> Ya me pagó</label>
+        <label class="payopt"><input type="radio" name="cobModo" value="linea"> Pagará en línea con tarjeta</label>
+        <div id="cobFormaBox">
+            <label class="plabel" for="cobForma">Forma de pago recibida</label>
+            <select id="cobForma" class="pfield">
+                <option>Efectivo</option><option>Transferencia</option><option>Tarjeta</option><option>Depósito</option><option>Otro</option>
+            </select>
+        </div>
+        <div id="cobError" class="pin-error hidden"></div>
+        <div class="modal-actions">
+            <button type="button" class="action-btn" id="cobCancel">Cancelar</button>
+            <button type="button" class="action-btn primary" id="cobOk">Finalizar servicio</button>
+        </div>
+        <button type="button" class="skiplink" id="cobSkip">Finalizar sin registrar cobro</button>
+    </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script type="module">
+/* =========================================================
+   FIREBASE
+========================================================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+import { getFirestore, doc, getDoc, updateDoc, setDoc, collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyBQ3ojcGtxCkd8zWTFz3Z-bXZux4kU8VrU",
+    authDomain: "isep-e7efe.firebaseapp.com",
+    databaseURL: "https://isep-e7efe-default-rtdb.firebaseio.com",
+    projectId: "isep-e7efe",
+    storageBucket: "isep-e7efe.firebasestorage.app",
+    messagingSenderId: "838801875419",
+    appId: "1:838801875419:web:abef6e9fb2f0f7bcd907fe",
+    measurementId: "G-7XYS986QPQ"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+/* =========================================================
+   LEAFLET
+========================================================= */
+const map = L.map("map", { zoomControl:true }).setView([17.9892,-92.9475], 10);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom:19,
+    attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+/* =========================================================
+   VARIABLES
+========================================================= */
+let currentUser = null;
+let technicianData = null;
+let currentService = null;
+let technicianMarker = null;
+let clientMarker = null;
+let routeLine = null;
+let trajectoryLine = null;
+let watchId = null;
+let lastPosition = null;
+let lastTrajectoryPosition = null;
+let technicianUnsubscribe = null;
+let serviceUnsubscribe = null;
+let trajectoryUnsubscribe = null;
+let gpsActive = false;
+let currentStatus = "disponible";
+let routeRequestController = null;
+
+/* =========================================================
+   DOM
+========================================================= */
+const loginScreen = document.getElementById("loginScreen");
+const appScreen = document.getElementById("app");
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const loginError = document.getElementById("loginError");
+const emailInput = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const technicianName = document.getElementById("technicianName");
+const statusText = document.getElementById("statusText");
+const statusSub = document.getElementById("statusSub");
+const statusDot = document.getElementById("statusDot");
+const gpsStatus = document.getElementById("gpsStatus");
+const gpsLat = document.getElementById("gpsLat");
+const gpsLng = document.getElementById("gpsLng");
+const gpsAccuracy = document.getElementById("gpsAccuracy");
+const gpsTime = document.getElementById("gpsTime");
+const gpsBtn = document.getElementById("gpsBtn");
+const connectionText = document.getElementById("connectionText");
+const serviceContent = document.getElementById("serviceContent");
+const serviceState = document.getElementById("serviceState");
+const routeBtn = document.getElementById("routeBtn");
+const clientBtn = document.getElementById("clientBtn");
+const arrivedBtn = document.getElementById("arrivedBtn");
+const finishBtn = document.getElementById("finishBtn");
+const confirmBtn = document.getElementById("confirmBtn");
+const centerClientBtn = document.getElementById("centerClientBtn");
+const centerTechnicianBtn = document.getElementById("centerTechnicianBtn");
+const mapStatus = document.getElementById("mapStatus");
+const toast = document.getElementById("toast");
+
+/* =========================================================
+   HELPERS
+========================================================= */
+function showToast(message){
+    toast.textContent = message;
+    toast.classList.remove("hidden");
+    clearTimeout(window.toastTimer);
+    window.toastTimer = setTimeout(() => { toast.classList.add("hidden"); }, 3500);
+}
+
+function showLoginError(message){
+    loginError.textContent = message;
+    loginError.classList.remove("hidden");
+}
+
+function clearLoginError(){
+    loginError.style.cssText = "";
+    loginError.textContent = "";
+    loginError.classList.add("hidden");
+}
+
+function normalizeStatus(status){
+    if(!status) return "disponible";
+    return String(status).toLowerCase().trim();
+}
+
+function formatStatus(status){
+    const value = normalizeStatus(status);
+    const statuses = {
+        "disponible":"Disponible",
+        "ocupado":"Ocupado",
+        "en camino":"En camino",
+        "en servicio":"En servicio",
+        "finalizado":"Finalizado",
+        "desconectado":"Desconectado"
+    };
+    return statuses[value] || status;
+}
+
+function getServiceCoordinates(service){
+    if(!service) return null;
+    const candidates = [service.geo, service.ubicacion, service.location, service.coordenadas, service.coordenadascliente];
+    for(const value of candidates){
+        if(value && Number.isFinite(Number(value.lat)) && Number.isFinite(Number(value.lng))){
+            return { lat:Number(value.lat), lng:Number(value.lng) };
+        }
+        if(value && Number.isFinite(Number(value.latitude)) && Number.isFinite(Number(value.longitude))){
+            return { lat:Number(value.latitude), lng:Number(value.longitude) };
+        }
+    }
+    if(Number.isFinite(Number(service.lat)) && Number.isFinite(Number(service.lng))){
+        return { lat:Number(service.lat), lng:Number(service.lng) };
+    }
+    if(Number.isFinite(Number(service.latitud)) && Number.isFinite(Number(service.longitud))){
+        return { lat:Number(service.latitud), lng:Number(service.longitud) };
+    }
+    return null;
+}
+
+function getServiceId(service){
+    if(!service) return null;
+    return service.id || service.folio || service.servicioid || null;
+}
+
+function getClientName(service){
+    if(!service) return "Cliente";
+    if(typeof service.cliente === "string") return service.cliente;
+    if(service.cliente && typeof service.cliente === "object"){
+        return service.cliente.nombre || service.cliente.name || "Cliente";
+    }
+    return service.nombrecliente || service.nombre || "Cliente";
+}
+
+function getClientPhone(service){
+    if(!service) return "";
+    if(service.cliente && typeof service.cliente === "object"){
+        return service.cliente.telefono || service.cliente.phone || "";
+    }
+    return service.telefonocliente || service.telefono || "";
+}
+
+function getClientAddress(service){
+    if(!service) return "Sin dirección";
+    return service.direccion || service.ubicaciontexto || service.domicilio || service.direccioncliente || "Sin dirección";
+}
+
+function distanceMeters(a,b){
+    if(!a || !b) return Infinity;
+    const R = 6371000;
+    const lat1 = a.lat * Math.PI / 180;
+    const lat2 = b.lat * Math.PI / 180;
+    const dLat = (b.lat-a.lat) * Math.PI / 180;
+    const dLng = (b.lng-a.lng) * Math.PI / 180;
+    const x = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng/2) * Math.sin(dLng/2);
+    return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+/* =========================================================
+   ESTATUS DEL SERVICIO (los mismos 6 pasos que ve el cliente)
+   0 Técnico sin asignar → 1 Técnico asignado → 2 Confirmado
+   → 3 En camino → 4 En servicio → 5 Finalizado
+========================================================= */
+const ST = ["Técnico sin asignar","Técnico asignado","Confirmado","En camino","En servicio","Finalizado"];
+const ST_ESTADO = ["pendiente","asignado","confirmado","en camino","en servicio","finalizado"];
+const ST_TEC = ["","asignado","confirmado","en_camino","en_servicio","finalizado"];
+const SVC_NAMES = {
+    instalacion:"Instalación eléctrica",
+    corto:"Corto circuito / emergencia",
+    medidor:"Cambio de medidor",
+    panel:"Revisión de panel",
+    clima:"Aire acondicionado",
+    iluminacion:"Iluminación y contactos"
+};
+
+// Lee primero el texto del estatus y luego el número (igual que index.html).
+function idxOf(s){
+    const q = t => String(t).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+    const alias = {
+        sinasignar:0, tecnicosinasignar:0, sintecnico:0, pendiente:0, recibido:0, nuevo:0, solicitado:0,
+        asignado:1, tecnicoasignado:1,
+        confirmado:2, aceptado:2, programado:2,
+        encamino:3, enruta:3, camino:3,
+        enservicio:4, enproceso:4, iniciado:4, trabajando:4, llegue:4,
+        finalizado:5, completado:5, terminado:5, concluido:5, listo:5, hecho:5
+    };
+    const campos = [s.estatus, s.status, s.estado, s.tecnicoEstado, s.statusIdx, s.statusIndex];
+    let i = null;
+    for(const v of campos){
+        if(typeof v === "string" && v){ const k = q(v); if(k in alias){ i = alias[k]; break; } }
+    }
+    if(i === null){
+        for(const v of campos){
+            if(v === undefined || v === null || v === "") continue;
+            const n = Number(v);
+            if(Number.isInteger(n) && n >= 0 && n <= 5){ i = n; break; }
+        }
+    }
+    if(i === null) i = 0;
+    return Math.max(i, (s.tecnicoUid || s.tecnicoid) ? 1 : 0);   // un servicio asignado a un técnico es al menos "asignado"
+}
+
+function servicePatch(idx, extra = {}){
+    return {
+        statusIdx: idx,
+        estatus: ST[idx],
+        estado: ST_ESTADO[idx],
+        tecnicoEstado: ST_TEC[idx],
+        tecnicoEstadoTexto: ST[idx],
+        actualizadoen: serverTimestamp(),
+        ...extra
+    };
+}
+
+function curIdx(){
+    return currentService ? idxOf(currentService) : -1;
+}
+
+/* =========================================================
+   LOGIN
+========================================================= */
+loginBtn.addEventListener("click", login);
+passwordInput.addEventListener("keydown", event => { if(event.key === "Enter") login(); });
+emailInput.addEventListener("keydown", event => { if(event.key === "Enter") passwordInput.focus(); });
+
+document.getElementById("forgotBtn").addEventListener("click", async () => {
+    clearLoginError();
+    const email = emailInput.value.trim();
+    if(!email){ showLoginError("Escribe tu correo arriba y vuelve a tocar \"¿Olvidaste tu contraseña?\"."); emailInput.focus(); return; }
+    const btn = document.getElementById("forgotBtn");
+    btn.disabled = true;
+    try{
+        await sendPasswordResetEmail(auth, email);
+    }catch(error){
+        console.error(error);
+        if(["auth/invalid-email","auth/too-many-requests","auth/network-request-failed"].includes(error?.code)){
+            showLoginError(error.code === "auth/invalid-email" ? "El correo no es válido." : getAuthError(error));
+            btn.disabled = false;
+            return;
+        }
+    }
+    btn.disabled = false;
+    loginError.textContent = "Si el correo está registrado, te enviamos un enlace para restablecer la contraseña. Revisa también la carpeta de spam.";
+    loginError.style.cssText = "background:#e8f4ee;border-color:#b6dcc8;color:#0b5c37";
+    loginError.classList.remove("hidden");
+});
+
+async function login(){
+    clearLoginError();
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if(!email || !password){
+        showLoginError("Escribe tu correo y contraseña.");
+        return;
+    }
+    loginBtn.disabled = true;
+    loginBtn.textContent = "Ingresando...";
+
+    try{
+        await signInWithEmailAndPassword(auth, email, password);
+    }catch(error){
+        console.error(error);
+        showLoginError(getAuthError(error));
+        loginBtn.disabled = false;
+        loginBtn.textContent = "Iniciar sesión";
+    }
+}
+
+function getAuthError(error){
+    const code = error?.code || "";
+    const messages = {
+        "auth/invalid-credential": "Correo o contraseña incorrectos.",
+        "auth/invalid-login-credentials": "Correo o contraseña incorrectos.",
+        "auth/user-not-found": "No existe este usuario.",
+        "auth/wrong-password": "Contraseña incorrecta.",
+        "auth/too-many-requests": "Demasiados intentos. Espera unos minutos.",
+        "auth/network-request-failed": "No hay conexión con Firebase."
+    };
+    return messages[code] || "No fue posible iniciar sesión.";
+}
+
+/* =========================================================
+   AUTH STATE
+========================================================= */
+onAuthStateChanged(auth, async user => {
+    if(user){
+        try{
+            await initializeTechnician(user);
+        }catch(error){
+            console.error(error);
+            await signOut(auth);
+            showLoginError(error.message || "No se pudo validar al técnico.");
+        }
+    }else{
+        stopGPS();
+        cleanupListeners();
+        currentUser = null;
+        limpiarVerificacion();
+        if(verifUnsub){ verifUnsub(); verifUnsub = null; }
+        verifScreen.classList.add("hidden");
+        legalScreen.classList.add("hidden");
+        loginScreen.classList.remove("hidden");
+        appScreen.classList.add("hidden");
+        loginBtn.disabled = false;
+        loginBtn.textContent = "Iniciar sesión";
+    }
+});
+
+/* =========================================================
+   INITIALIZE TECHNICIAN
+========================================================= */
+async function initializeTechnician(user){
+    currentUser = user;
+    const uid = user.uid;
+
+    // CONSULTA ESTRICTAMENTE EN MINÚSCULAS
+    const technicianRef = doc(db,"tecnicos",uid);
+    const technicianSnap = await getDoc(technicianRef);
+
+    if(!technicianSnap.exists()){
+        throw new Error("Este usuario no está registrado como técnico en la base de datos.");
+    }
+
+    technicianData = technicianSnap.data();
+
+    const role = String(technicianData.rol || technicianData.role || "").toLowerCase();
+    if(role && role !== "tecnico" && role !== "técnico"){
+        throw new Error("Esta cuenta no tiene rol de técnico.");
+    }
+
+    // Aviso de privacidad, permisos y T&C: obligatorio antes de ver el panel o enviar documentos.
+    if(necesitaLegal(technicianData)){
+        mostrarLegal();
+        return;
+    }
+
+    // Verificación de documentos (las cuentas anteriores, sin este campo, siguen funcionando)
+    const verEstado = technicianData.verificacion && technicianData.verificacion.estado;
+    if(verEstado === "pendiente" || verEstado === "rechazado" || verEstado === "enviado"){
+        // Aún no está aprobado: solo ve la pantalla de verificación (nunca el panel).
+        mostrarVerificacion(verEstado, technicianData.verificacion && technicianData.verificacion.motivo);
+        return;
+    }
+
+    // Validar el campo 'activo'
+    if(technicianData.activo !== true){
+        throw new Error("Esta cuenta de técnico está desactivada.");
+    }
+
+    technicianName.textContent = technicianData.nombre || technicianData.name || user.email || "Técnico";
+    currentStatus = normalizeStatus(technicianData.estado || technicianData.status || "disponible");
+    updateStatusUI(currentStatus);
+
+    loginScreen.classList.add("hidden");
+    verifScreen.classList.add("hidden");
+    appScreen.classList.remove("hidden");
+    connectionText.textContent = "Conectado a Firebase";
+
+    listenTechnician();
+    listenAssignedService();
+    startGPS();
+
+    setTimeout(() => { map.invalidateSize(); }, 300);
+    showToast("Sesión iniciada correctamente.");
+}
+
+/* =========================================================
+   TECHNICIAN LISTENER
+========================================================= */
+function listenTechnician(){
+    if(technicianUnsubscribe) technicianUnsubscribe();
+
+    const ref = doc(db, "tecnicos", currentUser.uid);
+
+    technicianUnsubscribe = onSnapshot(ref, snap => {
+        if(!snap.exists()) return;
+        technicianData = snap.data();
+        const name = technicianData.nombre || technicianData.name;
+        if(name) technicianName.textContent = name;
+        const newStatus = technicianData.estado || technicianData.status;
+        if(newStatus){
+            currentStatus = normalizeStatus(newStatus);
+            updateStatusUI(currentStatus);
+        }
+    }, error => {
+        console.error("Error técnico:", error);
+        connectionText.textContent = "Error de conexión";
+    });
+}
+
+/* =========================================================
+   SERVICE LISTENER
+========================================================= */
+function listenAssignedService(){
+    if(serviceUnsubscribe) serviceUnsubscribe();
+
+    // CONSULTA ESTRICTAMENTE EN MINÚSCULAS
+    const q = query(collection(db, "solicitudes"), where("tecnicoUid", "==", currentUser.uid));
+
+    serviceUnsubscribe = onSnapshot(q, snapshot => {
+        let selected = null;
+        snapshot.forEach(docSnap => {
+            const service = { id:docSnap.id, ...docSnap.data() };
+            if(service.cancelada === true) return;
+            const i = idxOf(service);
+            if(i >= 5) return;
+            // Si hay varios servicios activos se muestra el más avanzado (y, a igualdad, el más antiguo).
+            if(!selected || i > idxOf(selected) ||
+               (i === idxOf(selected) && (Number(service.createdAt) || 0) < (Number(selected.createdAt) || 0))){
+                selected = service;
+            }
+        });
+        setCurrentService(selected);
+    }, error => {
+        console.error("Error solicitudes:", error);
+        showToast("No se pudieron cargar las solicitudes.");
+    });
+}
+
+/* =========================================================
+   SET CURRENT SERVICE
+========================================================= */
+function updateServiceButtons(){
+    const has = !!currentService;
+    const i = curIdx();
+    clientBtn.disabled = !has;
+    confirmBtn.disabled = !(has && i === 1);
+    arrivedBtn.disabled = !(has && i >= 1 && i <= 3);
+    finishBtn.disabled = !(has && i === 4);
+}
+
+function setCurrentService(service){
+    const sameService = !!(service && currentService && service.id === currentService.id);
+    currentService = service;
+
+    if(sameService){
+        // Solo cambió un dato del mismo servicio (estatus, ruta enviada, etc.):
+        // se refrescan textos y botones sin reiniciar el mapa ni la trayectoria.
+        renderService();
+        updateServiceButtons();
+        refreshNext();
+        return;
+    }
+
+    pinAttempts = 0;
+    lastGeoPushAt = 0;
+    lastGeoPushPos = null;
+    cerrarPin();
+    refreshNext();
+
+    if(trajectoryUnsubscribe){ trajectoryUnsubscribe(); trajectoryUnsubscribe = null; }
+    if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+    if(clientMarker){ map.removeLayer(clientMarker); clientMarker = null; }
+    if(trajectoryLine){ map.removeLayer(trajectoryLine); trajectoryLine = null; }
+
+    if(!service){
+        serviceState.textContent = "Sin servicio";
+        serviceContent.innerHTML = `<div class="no-service">No tienes un servicio asignado actualmente.</div>`;
+        updateServiceButtons();
+        centerClientBtn.disabled = true;
+        mapStatus.textContent = gpsActive ? "GPS activo" : "Esperando ubicación";
+        return;
+    }
+
+    renderService();
+    updateServiceButtons();
+
+    const coords = getServiceCoordinates(service);
+    if(coords){
+        clientMarker = L.marker([coords.lat,coords.lng])
+            .addTo(map)
+            .bindPopup(`<b>Cliente</b><br>${escapeHtml(getClientName(service))}`);
+        centerClientBtn.disabled = false;
+    }
+
+    listenTrajectory();
+    if(lastPosition && coords){ calculateRoute(lastPosition, coords); }
+}
+
+/* =========================================================
+   RENDER SERVICE
+========================================================= */
+function renderService(){
+    const service = currentService;
+    const id = getServiceId(service);
+    const folio = service.folio || id || "Sin folio";
+    const client = getClientName(service);
+    const phone = getClientPhone(service);
+    const address = getClientAddress(service);
+    const idx = idxOf(service);
+    const servicios = Array.isArray(service.serviciosNombres) && service.serviciosNombres.length
+        ? service.serviciosNombres.map(n => n === "Otro (especifícalo abajo)" && service.servicioOtro ? "Otro: " + service.servicioOtro : n).join(", ")
+        : (Array.isArray(service.servicios) && service.servicios.length
+            ? service.servicios.map(x => SVC_NAMES[x] || x).join(", ") : "");
+    const detalleServicio = service.detalleServicio ? String(service.detalleServicio) : "";
+    const visita = [service.fechaLegible || service.fecha, service.horaLegible || service.hora].filter(Boolean).join(" · ");
+    const pinTexto = service.pinValidado ? "Validado ✓" : (service.pin ? "Pídeselo al llegar" : "No aplica");
+    const phoneHtml = phone
+        ? `<a href="tel:${escapeHtml(String(phone).replace(/[^\d+]/g, ""))}" style="color:inherit">${escapeHtml(String(phone))}</a>`
+        : "No registrado";
+
+    serviceState.textContent = ST[idx];
+    serviceContent.innerHTML = `
+        ${service.urgente ? '<div class="urgent">⚠ SERVICIO URGENTE · prioriza este domicilio</div>' : ''}
+        <div class="service-row">
+            <div class="service-label">Folio</div>
+            <div class="service-value folio">${escapeHtml(String(folio))}</div>
+        </div>
+        <div class="service-row">
+            <div class="service-label">Cliente</div>
+            <div class="service-value">${escapeHtml(String(client))}</div>
+        </div>
+        <div class="service-row">
+            <div class="service-label">Teléfono</div>
+            <div class="service-value">${phoneHtml}</div>
+        </div>
+        <div class="service-row">
+            <div class="service-label">Dirección</div>
+            <div class="service-value">${escapeHtml(String(address))}</div>
+        </div>
+        ${servicios ? `<div class="service-row">
+            <div class="service-label">Servicio</div>
+            <div class="service-value">${escapeHtml(servicios)}</div>
+        </div>` : ""}
+        ${detalleServicio ? `<div class="service-row">
+            <div class="service-label">Detalles</div>
+            <div class="service-value">${escapeHtml(detalleServicio)}</div>
+        </div>` : ""}
+        ${visita ? `<div class="service-row">
+            <div class="service-label">Visita</div>
+            <div class="service-value">${escapeHtml(visita)}</div>
+        </div>` : ""}
+        <div class="service-row">
+            <div class="service-label">Estado</div>
+            <div class="service-value"><span class="badge">${escapeHtml(ST[idx])}</span></div>
+        </div>
+        ${Number(service.montoCobrado) > 0 ? `<div class="service-row">
+            <div class="service-label">Cobro</div>
+            <div class="service-value">${escapeHtml(Number(service.montoCobrado).toLocaleString("es-MX", {style:"currency", currency:"MXN"}))} · ${service.pagado ? "Pagado" : "Por cobrar"}</div>
+        </div>` : ""}
+        ${service.hojaGarantia && service.hojaGarantia.enviada ? `<div class="service-row">
+            <div class="service-label">Hoja de garantía</div>
+            <div class="service-value">${escapeHtml(String(service.hojaGarantia.meses))} meses · ${service.hojaGarantia.entregada ? "Entregada al cliente" : "Pendiente de enviar"}
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                    <button type="button" class="action-btn primary" data-g="wa">Enviar por WhatsApp</button>
+                    <button type="button" class="action-btn" data-g="ver">Ver hoja</button>
+                    ${service.hojaGarantia.entregada ? "" : `<button type="button" class="action-btn" data-g="ok">Marcar entregada</button>`}
+                </div>
+            </div>
+        </div>` : ""}
+        <div class="service-row">
+            <div class="service-label">PIN del cliente</div>
+            <div class="service-value">${escapeHtml(pinTexto)}</div>
+        </div>
+    `;
+}
+
+/* =========================================================
+   STATUS
+========================================================= */
+function garantiaTexto(s){
+    const g = s.hojaGarantia || {};
+    const servicio = s.servicio || s.tipoServicio || (Array.isArray(s.servicios) ? s.servicios.join(", ") : "Servicio técnico");
+    return [
+        "HOJA DE GARANTÍA - ISEP.S.A",
+        "Folio: " + (s.folio || getServiceId(s)),
+        "Cliente: " + getClientName(s),
+        "Servicio: " + servicio,
+        "Fecha: " + new Date().toLocaleDateString("es-MX"),
+        "",
+        "Garantía: " + g.meses + " meses a partir de la fecha de este servicio.",
+        "Cubre: defectos en la mano de obra y en los materiales instalados por nuestro técnico.",
+        "No cubre: daños por mal uso, golpes, humedad, variaciones de voltaje de la red o manipulación por terceros.",
+        "Para hacerla válida, conserva esta hoja y menciona tu folio."
+    ].join("\n");
+}
+serviceContent.addEventListener("click", async event => {
+    const b = event.target.closest("[data-g]");
+    if(!b || !currentService) return;
+    const texto = garantiaTexto(currentService);
+    if(b.dataset.g === "wa"){
+        let tel = String(getClientPhone(currentService) || "").replace(/\D/g, "");
+        if(tel.length === 10) tel = "52" + tel;
+        window.open("https://wa.me/" + tel + "?text=" + encodeURIComponent(texto), "_blank");
+    }else if(b.dataset.g === "ver"){
+        const w = window.open("", "_blank");
+        if(!w){ showToast("Permite las ventanas emergentes para ver la hoja."); return; }
+        w.document.write("<title>Hoja de garantía</title><pre style=\"font:16px/1.5 sans-serif;white-space:pre-wrap;padding:24px\">" + escapeHtml(texto) + "</pre>");
+        w.document.close();
+    }else if(b.dataset.g === "ok"){
+        try{
+            await updateDoc(doc(db, "solicitudes", currentService.id), { "hojaGarantia.entregada": true, "hojaGarantia.entregadaEn": serverTimestamp() });
+            showToast("Hoja de garantía marcada como entregada.");
+        }catch(error){ writeError(error, "No se pudo marcar la hoja"); }
+    }
+});
+document.querySelectorAll(".status-btn").forEach(button => {
+    button.addEventListener("click", async () => {
+        await changeStatus(button.dataset.status);
+    });
+});
+
+function writeError(error, fallback){
+    console.error(error);
+    showToast(error?.code === "permission-denied"
+        ? "Sin permiso en Firestore para actualizar el servicio. Revisa las reglas."
+        : fallback + " (" + (error?.code || error?.message || "error") + ")");
+}
+
+// Estado del técnico (documento tecnicos/{uid}); lo ve Logística.
+async function setTechState(estado, extra = {}){
+    if(!currentUser) return;
+    await updateDoc(doc(db, "tecnicos", currentUser.uid), {
+        estado: estado,
+        status: estado,
+        ultimaconexion: serverTimestamp(),
+        actualizadoen: serverTimestamp(),
+        ...extra
+    });
+    currentStatus = estado;
+    updateStatusUI(estado);
+}
+
+// Estatus del servicio (documento solicitudes/{folio}); lo ven el cliente, el admin y Logística.
+async function setServiceIdx(idx, extra = {}){
+    const folio = currentService.id;
+    await updateDoc(doc(db, "solicitudes", folio), servicePatch(idx, extra));
+    notificarCliente(folio);   // aviso push al cliente (no bloquea ni rompe el flujo si falla)
+}
+
+// Pide a la función de Vercel que envíe la notificación push del folio.
+async function notificarCliente(folio){
+    try{
+        const token = await auth.currentUser.getIdToken();
+        const r = await fetch("https://isep-s-a.vercel.app/api/notificar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+            body: JSON.stringify({ folio })
+        });
+        const data = await r.json().catch(() => ({}));
+        if(!r.ok || data.enviado === false){
+            console.warn("Notificación no enviada:", data);
+            // Se muestra en pantalla para poder diagnosticar desde el celular.
+            setTimeout(() => showToast("No se pudo enviar el aviso al cliente. Si es urgente, avísale por WhatsApp."), 3800);
+        }else{
+            setTimeout(() => showToast("Aviso enviado al cliente ✓"), 3800);
+        }
+    }catch(e){
+        console.warn("No se pudo notificar al cliente", e);
+        setTimeout(() => showToast("No se pudo enviar el aviso al cliente. Revisa tu conexión."), 3800);
+    }
+}
+
+// Botones rápidos de estado: siguen el mismo flujo que los botones de acciones.
+async function changeStatus(status){
+    if(!currentUser) return;
+    const s = normalizeStatus(status);
+    const i = curIdx();
+
+    if(s === "disponible"){
+        if(currentService && (i === 3 || i === 4)){
+            showToast("Tienes un servicio en curso. Finalízalo primero.");
+            return;
+        }
+        try{
+            await setTechState("disponible");
+            showToast("Estado actualizado.");
+        }catch(error){
+            writeError(error, "No se pudo actualizar el estado");
+        }
+        return;
+    }
+
+    if(!currentService){ showToast("No tienes un servicio asignado."); return; }
+    if(s === "en camino") return salirHaciaCliente();
+    if(s === "en servicio") return abrirPin();
+    if(s === "finalizado") return finalizarServicio();
+}
+
+// 1 → 2: el técnico acepta el servicio.
+async function confirmarServicio(){
+    if(!currentService) return;
+    if(curIdx() !== 1){ showToast("Este servicio ya fue confirmado."); return; }
+    if(!limpiarTel(technicianData && technicianData.telefono)){
+        showToast("Agrega tu teléfono en «Mi perfil» para que el cliente pueda contactarte.");
+        abrirPerfil();
+        return;
+    }
+    try{
+        await setServiceIdx(2, { confirmadoen: serverTimestamp(), ...techInfoPatch() });
+        await setTechState("ocupado", { servicioactualid: currentService.id });
+        showToast("Servicio confirmado. El cliente ya lo ve.");
+    }catch(error){
+        writeError(error, "No se pudo confirmar el servicio");
+    }
+}
+
+// → 3: el técnico sale hacia el domicilio (el cliente ve su ubicación y su PIN).
+async function salirHaciaCliente(){
+    if(!currentService) return;
+    const i = curIdx();
+    if(i === 3){ showToast("Ya vas en camino."); return; }
+    if(i >= 4){ showToast("El servicio ya está en proceso."); return; }
+    try{
+        const extra = { salioen: serverTimestamp(), ...techInfoPatch() };
+        if(i < 2) extra.confirmadoen = serverTimestamp();
+        await setServiceIdx(3, extra);
+        await setTechState("en camino", { servicioactualid: currentService.id });
+        if(lastPosition) pushClientGeo(lastPosition, true);
+        showToast(gpsActive ? "En camino. El cliente ve tu ubicación." : "En camino. Activa el GPS para que el cliente te vea.");
+    }catch(error){
+        writeError(error, "No se pudo registrar la salida");
+    }
+}
+
+// → 4: llegó y el cliente dio su PIN correcto.
+async function iniciarServicio(pin){
+    if(!currentService) return false;
+    try{
+        await setServiceIdx(4, {
+            pinValidado: true,
+            pinValidadoEn: serverTimestamp(),
+            pinIngresado: pin,
+            llegadoen: serverTimestamp(),
+            tecnicoGeo: null
+        });
+        await setTechState("en servicio", { servicioactualid: currentService.id });
+        showToast("PIN correcto. Servicio iniciado.");
+        return true;
+    }catch(error){
+        writeError(error, "No se pudo iniciar el servicio");
+        return false;
+    }
+}
+
+// → 5: servicio terminado (solo después de validar el PIN).
+async function finalizarServicio(){
+    if(!currentService) return;
+    if(curIdx() < 4){
+        showToast("Primero valida el PIN del cliente para iniciar el servicio.");
+        return;
+    }
+    if(currentService.pagado){   // ya tiene pago registrado: se finaliza como antes
+        if(!confirm("¿Confirmas que deseas finalizar este servicio?")) return;
+        await cerrarServicio({});
+        return;
+    }
+    abrirCobro();
+}
+
+// Comparte la ubicación del técnico con el cliente mientras va en camino.
+let lastGeoPushAt = 0;
+let lastGeoPushPos = null;
+async function pushClientGeo(coords, force = false){
+    // Con force (justo al salir) no se espera a que llegue el snapshot con el nuevo estatus.
+    if(!currentService || (!force && curIdx() !== 3)) return;
+    const now = Date.now();
+    if(!force){
+        if(now - lastGeoPushAt < 8000) return;
+        if(lastGeoPushPos && distanceMeters(lastGeoPushPos, coords) < 10 && now - lastGeoPushAt < 30000) return;
+    }
+    lastGeoPushAt = now;
+    lastGeoPushPos = coords;
+    try{
+        await updateDoc(doc(db, "solicitudes", currentService.id), {
+            tecnicoGeo: { lat: coords.lat, lng: coords.lng, t: now }
+        });
+    }catch(error){
+        console.warn("No se pudo compartir la ubicación con el cliente:", error);
+    }
+}
+
+function updateStatusUI(status){
+    refreshNext();
+    const normalized = normalizeStatus(status);
+    statusText.textContent = formatStatus(normalized);
+
+    document.querySelectorAll(".status-btn").forEach(button => {
+        button.classList.toggle("active", normalizeStatus(button.dataset.status) === normalized);
+    });
+
+    if(normalized === "disponible"){
+        statusDot.style.background = "#7dff9b";
+        statusSub.textContent = "Disponible para recibir solicitudes.";
+    }else if(normalized === "ocupado"){
+        statusDot.style.background = "#ff9f43";
+        statusSub.textContent = "Servicio confirmado. Sal hacia el cliente cuando estés listo.";
+    }else if(normalized === "en camino"){
+        statusDot.style.background = "#ffd166";
+        statusSub.textContent = "Dirigiéndote al domicilio.";
+    }else if(normalized === "en servicio"){
+        statusDot.style.background = "#72b7ff";
+        statusSub.textContent = "Servicio en proceso.";
+    }else if(normalized === "finalizado"){
+        statusDot.style.background = "#aaa";
+        statusSub.textContent = "Servicio finalizado.";
+    }else{
+        statusDot.style.background = "#777";
+        statusSub.textContent = "Estado actualizado.";
+    }
+}
+
+/* =========================================================
+   GPS
+========================================================= */
+gpsBtn.addEventListener("click", () => {
+    if(gpsActive) stopGPS();
+    else startGPS();
+});
+
+function startGPS(){
+    if(gpsActive) return;
+    if(!("geolocation" in navigator)){
+        showToast("Este dispositivo no soporta GPS del navegador.");
+        return;
+    }
+    gpsBtn.disabled = true;
+    gpsBtn.textContent = "Solicitando GPS...";
+
+    if(currentUser){
+        updateDoc(doc(db, "tecnicos", currentUser.uid), {
+            gpsactivo: true,
+            gpsestado: "solicitando",
+            ultimaconexion: serverTimestamp(),
+            actualizadoen: serverTimestamp()
+        }).catch(error => console.error("GPS state:", error));
+    }
+
+    watchId = navigator.geolocation.watchPosition(
+        position => {
+            gpsActive = true;
+            gpsBtn.disabled = false;
+            gpsBtn.textContent = "Desactivar GPS";
+            gpsStatus.textContent = "Activo";
+            gpsStatus.classList.remove("gps-off");
+            gpsStatus.classList.add("gps-on");
+            handlePosition(position);
+        },
+        error => {
+            gpsActive = false;
+            gpsBtn.disabled = false;
+            gpsBtn.textContent = "Activar GPS";
+            gpsStatus.textContent = "Error GPS";
+            gpsStatus.classList.remove("gps-on");
+            gpsStatus.classList.add("gps-off");
+            if(currentUser){
+                updateDoc(doc(db, "tecnicos", currentUser.uid), {
+                    gpsactivo: false,
+                    gpsestado: "error",
+                    ultimaconexion: serverTimestamp(),
+                    actualizadoen: serverTimestamp()
+                }).catch(err => console.error("GPS state:", err));
+            }
+
+            console.error("GPS:", error);
+            
+            let message = "No se pudo obtener la ubicación.";
+            if(error.code === 1) message = "Debes permitir el acceso a la ubicación.";
+            if(error.code === 2) message = "No fue posible determinar tu ubicación.";
+            if(error.code === 3) message = "El GPS tardó demasiado en responder.";
+            showToast(message);
+        },
+        { enableHighAccuracy:true, maximumAge:5000, timeout:15000 }
+    );
+}
+
+function stopGPS(){
+    if(watchId !== null){
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+    }
+
+    if(currentUser){
+        updateDoc(doc(db, "tecnicos", currentUser.uid), {
+            gpsactivo: false,
+            gpsestado: "desactivado",
+            actualizadoen: serverTimestamp()
+        }).catch(error => console.error("GPS state:", error));
+    }
+
+    gpsActive = false;
+    gpsBtn.disabled = false;
+    gpsBtn.textContent = "Activar GPS";
+    gpsStatus.textContent = "Desactivado";
+    gpsStatus.classList.remove("gps-on");
+    gpsStatus.classList.add("gps-off");
+}
+
+/* =========================================================
+   HANDLE POSITION
+========================================================= */
+async function handlePosition(position){
+    const coords = { lat: Number(position.coords.latitude), lng: Number(position.coords.longitude) };
+    const accuracy = Number(position.coords.accuracy);
+
+    if(!Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) return;
+
+    lastPosition = coords;
+    gpsLat.textContent = coords.lat.toFixed(6);
+    gpsLng.textContent = coords.lng.toFixed(6);
+    gpsAccuracy.textContent = Number.isFinite(accuracy) ? Math.round(accuracy) + " m" : "—";
+    gpsTime.textContent = new Date().toLocaleTimeString("es-MX");
+    mapStatus.textContent = "GPS activo";
+
+    updateTechnicianMarker(coords);
+    pushClientGeo(coords);
+
+    if(currentService){
+        const destination = getServiceCoordinates(currentService);
+        if(destination) calculateRoute(coords, destination);
+    }
+
+    await updateTechnicianLocation(coords, accuracy);
+    await saveTrajectoryPoint(coords, accuracy);
+}
+
+/* =========================================================
+   TECHNICIAN MARKER
+========================================================= */
+function updateTechnicianMarker(coords){
+    if(!technicianMarker){
+        technicianMarker = L.marker([coords.lat,coords.lng]).addTo(map).bindPopup("<b>Mi ubicación</b>");
+        map.setView([coords.lat,coords.lng], 15);
+    }else{
+        technicianMarker.setLatLng([coords.lat,coords.lng]);
+    }
+}
+
+/* =========================================================
+   UPDATE FIRESTORE GPS
+========================================================= */
+async function updateTechnicianLocation(coords, accuracy){
+    if(!currentUser) return;
+    try{
+        const ref = doc(db, "tecnicos", currentUser.uid);
+        const location = {
+            lat: coords.lat,
+            lng: coords.lng,
+            latitude: coords.lat,
+            longitude: coords.lng,
+            accuracy: Number.isFinite(accuracy) ? accuracy : null,
+            timestamp: serverTimestamp()
+        };
+
+        // DATOS COMPARTIDOS CON LOGÍSTICA
+        await updateDoc(ref, {
+            ubicacion: location,
+            location: location,
+            gpsactivo: true,
+            gpsestado: "activo",
+            ultimaconexion: serverTimestamp(),
+            actualizadoen: serverTimestamp()
+        });
+
+        connectionText.textContent = "GPS sincronizado con Logística";
+    }catch(error){
+        console.error("Error actualizando GPS:", error);
+        connectionText.textContent = "GPS local activo / error Firebase";
+    }
+}
+
+/* =========================================================
+   TRAJECTORY
+========================================================= */
+async function saveTrajectoryPoint(coords, accuracy){
+    if(!currentUser || !currentService) return;
+    
+    if(lastTrajectoryPosition){
+        const distance = distanceMeters(lastTrajectoryPosition, coords);
+        if(distance < 20) return;
+    }
+    
+    lastTrajectoryPosition = coords;
+
+    try{
+        const serviceId = currentService.id;
+        
+        const trajectoryRef = collection(db, "solicitudes", serviceId, "trayectoria");
+
+        await addDoc(trajectoryRef, {
+            lat: coords.lat,
+            lng: coords.lng,
+            accuracy: Number.isFinite(accuracy) ? accuracy : null,
+            tecnicoid: currentUser.uid,
+            timestamp: serverTimestamp()
+        });
+    }catch(error){
+        console.error("Error trayectoria:", error);
+    }
+}
+
+/* =========================================================
+   LISTEN TRAJECTORY
+========================================================= */
+function listenTrajectory(){
+    if(!currentService || !currentService.id) return;
+    
+    if(trajectoryUnsubscribe){ trajectoryUnsubscribe(); trajectoryUnsubscribe = null; }
+
+    const ref = collection(db, "solicitudes", currentService.id, "trayectoria");
+    const q = query(ref, orderBy("timestamp", "asc"), limit(1000));
+
+    trajectoryUnsubscribe = onSnapshot(q, snapshot => {
+        const points = [];
+        snapshot.forEach(pointSnap => {
+            const data = pointSnap.data();
+            const lat = Number(data.lat);
+            const lng = Number(data.lng);
+            if(Number.isFinite(lat) && Number.isFinite(lng)){
+                points.push([lat,lng]);
+            }
+        });
+
+        if(trajectoryLine){ map.removeLayer(trajectoryLine); }
+        
+        if(points.length >= 2){
+            trajectoryLine = L.polyline(points, { weight:4, opacity:.75 }).addTo(map);
+        }
+    }, error => {
+        console.error("Error trayectoria:", error);
+    });
+}
+
+/* =========================================================
+   ROUTING OSRM
+========================================================= */
+async function calculateRoute(origin, destination){
+    if(!origin || !destination) return;
+    if(routeRequestController) routeRequestController.abort();
+    routeRequestController = new AbortController();
+
+    const url = "https://router.project-osrm.org/route/v1/driving/" +
+        `${origin.lng},${origin.lat};${destination.lng},${destination.lat}` +
+        "?overview=full&geometries=geojson";
+
+    try{
+        const response = await fetch(url, { signal: routeRequestController.signal });
+        if(!response.ok) throw new Error("OSRM HTTP " + response.status);
+        const data = await response.json();
+        
+        if(data.code !== "Ok" || !data.routes || !data.routes.length) return;
+        const route = data.routes[0];
+        const coordinates = route.geometry.coordinates.map(point => [point[1], point[0]]);
+
+        if(routeLine){ map.removeLayer(routeLine); }
+        routeLine = L.polyline(coordinates, { weight:5, opacity:.9 }).addTo(map);
+        
+        const distanceKm = (route.distance / 1000).toFixed(1);
+        const minutes = Math.round(route.duration / 60);
+        mapStatus.textContent = `Ruta: ${distanceKm} km · ${minutes} min`;
+    }catch(error){
+        if(error.name !== "AbortError"){ console.error("Error OSRM:", error); }
+    }
+}
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+routeBtn.addEventListener("click", async () => {
+    if(!currentService) return;
+    if(!lastPosition){ showToast("Activa el GPS primero."); return; }
+    
+    const destination = getServiceCoordinates(currentService);
+    if(!destination){ showToast("El servicio no tiene coordenadas."); return; }
+    
+    await calculateRoute(lastPosition, destination);
+    
+    const googleMapsLikeUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=` +
+        `${lastPosition.lat}%2C${lastPosition.lng}%3B${destination.lat}%2C${destination.lng}`;
+    window.open(googleMapsLikeUrl, "_blank");
+});
+
+clientBtn.addEventListener("click", () => {
+    if(!currentService) return;
+    const name = getClientName(currentService);
+    const phone = getClientPhone(currentService);
+    const address = getClientAddress(currentService);
+    showToast(`${name} · ${phone || "Sin teléfono"} · ${address}`);
+});
+
+confirmBtn.addEventListener("click", confirmarServicio);
+arrivedBtn.addEventListener("click", abrirPin);
+finishBtn.addEventListener("click", finalizarServicio);
+
+/* =========================================================
+   VALIDACIÓN DEL PIN DEL CLIENTE
+   El cliente ve su PIN de 4 dígitos en la pantalla de rastreo
+   (cuando el técnico va en camino). El servicio solo pasa a
+   "En servicio" si el técnico captura ese mismo PIN.
+========================================================= */
+const pinModal = document.getElementById("pinModal");
+const pinInput = document.getElementById("pinInput");
+const pinError = document.getElementById("pinError");
+const pinOk = document.getElementById("pinOk");
+let pinAttempts = 0;
+let pinLockUntil = 0;
+let pinBusy = false;
+
+function mostrarErrorPin(message){
+    pinError.textContent = message;
+    pinError.classList.remove("hidden");
+}
+
+function abrirPin(){
+    if(!currentService){ showToast("No tienes un servicio asignado."); return; }
+    if(curIdx() >= 4){ showToast("El servicio ya está en proceso."); return; }
+    if(!currentService.pin){
+        // Solicitudes anteriores al sistema de PIN no tienen código que validar.
+        if(confirm("Esta solicitud no tiene PIN (es anterior al sistema de seguridad). ¿Confirmas que ya estás con el cliente para iniciar el servicio?")){
+            iniciarServicio("");
+        }
+        return;
+    }
+    pinInput.value = "";
+    pinError.classList.add("hidden");
+    pinModal.classList.remove("hidden");
+    setTimeout(() => pinInput.focus(), 60);
+}
+
+function cerrarPin(){
+    pinModal.classList.add("hidden");
+    pinInput.value = "";
+    pinError.classList.add("hidden");
+}
+
+async function validarPin(){
+    if(pinBusy || !currentService) return;
+    const wait = pinLockUntil - Date.now();
+    if(wait > 0){ mostrarErrorPin("Demasiados intentos. Espera " + Math.ceil(wait / 1000) + " s."); return; }
+
+    const pin = pinInput.value.replace(/\D/g, "");
+    if(pin.length !== 4){ mostrarErrorPin("Escribe los 4 dígitos del código."); return; }
+
+    if(pin !== String(currentService.pin)){
+        pinAttempts++;
+        pinInput.value = "";
+        if(pinAttempts >= 3){
+            pinAttempts = 0;
+            pinLockUntil = Date.now() + 30000;
+            mostrarErrorPin("PIN incorrecto. Espera 30 s para intentarlo de nuevo.");
+        }else{
+            mostrarErrorPin("PIN incorrecto. Intentos restantes: " + (3 - pinAttempts) + ".");
+        }
+        return;
+    }
+
+    pinBusy = true;
+    pinOk.disabled = true;
+    const ok = await iniciarServicio(pin);
+    pinBusy = false;
+    pinOk.disabled = false;
+    if(ok){ pinAttempts = 0; cerrarPin(); }
+}
+
+pinOk.addEventListener("click", validarPin);
+document.getElementById("pinCancel").addEventListener("click", cerrarPin);
+pinInput.addEventListener("input", () => { pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, 4); });
+pinInput.addEventListener("keydown", event => { if(event.key === "Enter") validarPin(); });
+pinModal.addEventListener("click", event => { if(event.target === pinModal) cerrarPin(); });
+document.addEventListener("keydown", event => { if(event.key === "Escape" && !pinModal.classList.contains("hidden")) cerrarPin(); });
+
+/* =========================================================
+   COBRO AL FINALIZAR: monto + (ya pagó | pagará en línea con Stripe)
+========================================================= */
+const cobroModal = document.getElementById("cobroModal");
+const cobMonto = document.getElementById("cobMonto");
+const cobForma = document.getElementById("cobForma");
+const cobFormaBox = document.getElementById("cobFormaBox");
+const cobError = document.getElementById("cobError");
+const cobOk = document.getElementById("cobOk");
+const cobSkip = document.getElementById("cobSkip");
+let cobroBusy = false;
+
+function cobModo(){ return document.querySelector('input[name="cobModo"]:checked').value; }
+function cobroError(message){ cobError.textContent = message; cobError.classList.remove("hidden"); }
+function abrirCobro(){
+    const m = Number(currentService && currentService.montoCobrado);
+    cobMonto.value = m > 0 ? String(m) : "";
+    document.querySelector('input[name="cobModo"][value="ya"]').checked = true;
+    cobFormaBox.classList.remove("hidden");
+    cobError.classList.add("hidden");
+    cobroModal.classList.remove("hidden");
+    setTimeout(() => cobMonto.focus(), 60);
+}
+function cerrarCobro(){ if(!cobroBusy) cobroModal.classList.add("hidden"); }
+async function cerrarServicio(extra){
+    try{
+        await setServiceIdx(5, { finalizadoen: serverTimestamp(), ...extra });
+        await setTechState("disponible", { servicioactual: null, servicioactualid: null });
+        showToast("Servicio finalizado.");
+        return true;
+    }catch(error){
+        writeError(error, "No se pudo finalizar el servicio");
+        return false;
+    }
+}
+async function confirmarCobro(sinCobro){
+    if(cobroBusy || !currentService) return;
+    const extra = {};
+    if(!sinCobro){
+        const monto = Math.round(Number(cobMonto.value) * 100) / 100;
+        if(!(monto > 0)){ cobroError("Escribe el monto cobrado."); return; }
+        extra.montoCobrado = monto;
+        if(cobModo() === "ya"){
+            extra.pagado = true;
+            extra.pagoEnLinea = false;
+            extra.formaPago = cobForma.value;
+            extra.pagadoEn = serverTimestamp();
+            extra.pagadoPor = (currentUser && (currentUser.email || currentUser.uid)) || "Técnico";
+        }else{
+            extra.pagado = false;
+            extra.pagoEnLinea = true;
+            extra.formaPago = "Tarjeta";
+        }
+    }else if(!confirm("¿Finalizar sin registrar el cobro? Podrás capturarlo después desde el panel de administración.")){
+        return;
+    }
+    cobroBusy = true; cobOk.disabled = true; cobSkip.disabled = true;
+    const ok = await cerrarServicio(extra);
+    cobroBusy = false; cobOk.disabled = false; cobSkip.disabled = false;
+    if(ok) cobroModal.classList.add("hidden");
+}
+document.querySelectorAll('input[name="cobModo"]').forEach(r => r.addEventListener("change", () => {
+    cobFormaBox.classList.toggle("hidden", cobModo() === "linea");
+}));
+cobOk.addEventListener("click", () => confirmarCobro(false));
+cobSkip.addEventListener("click", () => confirmarCobro(true));
+document.getElementById("cobCancel").addEventListener("click", cerrarCobro);
+cobroModal.addEventListener("click", event => { if(event.target === cobroModal) cerrarCobro(); });
+
+/* =========================================================
+   MI PERFIL: teléfono, vehículo y foto del técnico
+   Se guardan en tecnicos/{uid} y se copian a la solicitud activa
+   para que el cliente pueda llamar o escribir al técnico.
+========================================================= */
+const profileModal = document.getElementById("profileModal");
+const profTel = document.getElementById("profTel");
+const profVeh = document.getElementById("profVeh");
+const profFoto = document.getElementById("profFoto");
+const profError = document.getElementById("profError");
+const profSave = document.getElementById("profSave");
+
+function limpiarTel(value){
+    return String(value || "").replace(/\D/g, "").slice(-10);
+}
+
+// Datos del técnico que ve el cliente (solo los que existen y son válidos).
+function techInfoPatch(){
+    const out = {};
+    const tel = limpiarTel(technicianData && technicianData.telefono);
+    if(tel.length === 10) out.tecnicoTelefono = tel;
+    if(technicianData && technicianData.vehiculo) out.vehiculo = String(technicianData.vehiculo);
+    const foto = technicianData && technicianData.foto;
+    if(typeof foto === "string" && /^https:\/\//i.test(foto)) out.tecnicoFoto = foto;
+    return out;
+}
+
+function abrirPerfil(){
+    profTel.value = limpiarTel(technicianData && technicianData.telefono);
+    profVeh.value = (technicianData && technicianData.vehiculo) || "";
+    profFoto.value = (technicianData && technicianData.foto) || "";
+    profError.classList.add("hidden");
+    profileModal.classList.remove("hidden");
+    setTimeout(() => (profTel.value ? profVeh : profTel).focus(), 60);
+}
+
+function cerrarPerfil(){
+    profileModal.classList.add("hidden");
+}
+
+function errorPerfil(message){
+    profError.textContent = message;
+    profError.classList.remove("hidden");
+}
+
+async function guardarPerfil(){
+    if(!currentUser) return;
+    const tel = limpiarTel(profTel.value);
+    const veh = profVeh.value.trim().slice(0, 80);
+    const foto = profFoto.value.trim();
+    if(tel.length !== 10){ errorPerfil("Escribe tu teléfono a 10 dígitos, sin espacios ni guiones."); return; }
+    if(foto && !/^https:\/\//i.test(foto)){ errorPerfil("La foto debe ser un enlace que empiece con https://"); return; }
+
+    profSave.disabled = true;
+    try{
+        await updateDoc(doc(db, "tecnicos", currentUser.uid), {
+            telefono: tel,
+            vehiculo: veh,
+            foto: foto,
+            actualizadoen: serverTimestamp()
+        });
+        technicianData = { ...technicianData, telefono: tel, vehiculo: veh, foto: foto };
+
+        // Si ya tiene un servicio activo, el cliente recibe los datos de inmediato.
+        const i = curIdx();
+        if(currentService && i >= 1 && i < 5){
+            await updateDoc(doc(db, "solicitudes", currentService.id), techInfoPatch());
+        }
+        cerrarPerfil();
+        showToast("Perfil guardado.");
+    }catch(error){
+        errorPerfil(error?.code === "permission-denied"
+            ? "Sin permiso en Firestore para guardar. Revisa las reglas."
+            : "No se pudo guardar (" + (error?.code || error?.message || "error") + ").");
+        console.error(error);
+    }finally{
+        profSave.disabled = false;
+    }
+}
+
+document.getElementById("profileBtn").addEventListener("click", abrirPerfil);
+document.getElementById("profCancel").addEventListener("click", cerrarPerfil);
+profSave.addEventListener("click", guardarPerfil);
+profileModal.addEventListener("click", event => { if(event.target === profileModal) cerrarPerfil(); });
+document.addEventListener("keydown", event => { if(event.key === "Escape" && !profileModal.classList.contains("hidden")) cerrarPerfil(); });
+
+/* =========================================================
+   AVISO DE PRIVACIDAD, PERMISOS Y TÉRMINOS Y CONDICIONES
+   - Se muestra antes que nada hasta que el técnico lo acepte.
+   - Debe llegar al final del texto y marcar todas las casillas.
+   - Se guarda en tecnicos/{uid}.aceptacionLegal con versión y fecha.
+   - Si cambias el texto, sube LEGAL_VERSION y todos deberán aceptar de nuevo.
+========================================================= */
+const LEGAL_VERSION = "2026-10-22";
+const legalScreen = document.getElementById("legalScreen");
+const legalScroll = document.getElementById("legalScroll");
+const legalHint = document.getElementById("legalHint");
+const legalChecks = document.getElementById("legalChecks");
+const legalError = document.getElementById("legalError");
+const legalAccept = document.getElementById("legalAccept");
+const legalBoxes = ["lgTerm","lgPriv","lgGps","lgDocs","lgCom"].map(id => document.getElementById(id));
+let legalLeido = false;
+let legalBusy = false;
+
+function necesitaLegal(data){
+    const a = data && data.aceptacionLegal;
+    return !(a && a.version === LEGAL_VERSION && a.terminos === true && a.privacidad === true);
+}
+
+function actualizarLegal(){
+    legalBoxes.forEach(b => { b.disabled = !legalLeido; });
+    legalChecks.classList.toggle("locked", !legalLeido);
+    legalAccept.disabled = legalBusy || !(legalLeido && legalBoxes.every(b => b.checked));
+}
+
+function revisarScrollLegal(){
+    if(legalLeido) return;
+    if(legalScroll.scrollTop + legalScroll.clientHeight >= legalScroll.scrollHeight - 24){
+        legalLeido = true;
+        legalHint.textContent = "✔ Leíste todo el documento. Marca las casillas para continuar.";
+        legalHint.classList.add("ok");
+        actualizarLegal();
+    }
+}
+
+function mostrarLegal(){
+    loginScreen.classList.add("hidden");
+    appScreen.classList.add("hidden");
+    verifScreen.classList.add("hidden");
+    legalScreen.classList.remove("hidden");
+    legalError.classList.add("hidden");
+    legalLeido = false;
+    legalBoxes.forEach(b => { b.checked = false; });
+    legalHint.textContent = "Desplázate hasta el final del documento para poder aceptar ↓";
+    legalHint.classList.remove("ok");
+    legalScroll.scrollTop = 0;
+    actualizarLegal();
+    setTimeout(revisarScrollLegal, 100);
+}
+
+async function aceptarLegal(){
+    if(!currentUser || legalBusy || !legalLeido || !legalBoxes.every(b => b.checked)) return;
+    legalBusy = true;
+    legalError.classList.add("hidden");
+    legalAccept.textContent = "Guardando…";
+    actualizarLegal();
+    try{
+        const aceptacion = {
+            version: LEGAL_VERSION,
+            terminos: true,
+            privacidad: true,
+            ubicacion: true,
+            documentosYDatosFinancieros: true,
+            comunicaciones: true,
+            aceptadoEn: serverTimestamp(),
+            dispositivo: String(navigator.userAgent || "").slice(0, 200)
+        };
+        await updateDoc(doc(db, "tecnicos", currentUser.uid), { aceptacionLegal: aceptacion, actualizadoen: serverTimestamp() });
+        technicianData = { ...technicianData, aceptacionLegal: { ...aceptacion, aceptadoEn: null } };
+        legalScreen.classList.add("hidden");
+        await initializeTechnician(currentUser);
+    }catch(error){
+        console.error(error);
+        legalError.textContent = error?.code === "permission-denied"
+            ? "Sin permiso en Firestore para guardar tu aceptación. Avisa a administración (reglas de seguridad)."
+            : "No se pudo guardar tu aceptación (" + (error?.code || error?.message || "error") + "). Inténtalo de nuevo.";
+        legalError.classList.remove("hidden");
+        legalScreen.classList.remove("hidden");
+    }finally{
+        legalBusy = false;
+        legalAccept.textContent = "Acepto y continuar";
+        actualizarLegal();
+    }
+}
+
+legalScroll.addEventListener("scroll", revisarScrollLegal);
+window.addEventListener("resize", () => { if(!legalScreen.classList.contains("hidden")) revisarScrollLegal(); });
+legalBoxes.forEach(b => b.addEventListener("change", actualizarLegal));
+legalAccept.addEventListener("click", aceptarLegal);
+document.getElementById("legalDecline").addEventListener("click", async () => { try{ await signOut(auth); }catch(error){ console.error(error); } });
+
+/* =========================================================
+   VERIFICACIÓN DE DOCUMENTOS
+   - El técnico sube INE, comprobante, foto y CLABE una sola vez.
+   - Se guardan en verificacionTecnicos/{uid} (solo lectura para administración).
+   - Al enviar se borran de la pantalla y de la memoria: nunca se vuelven a mostrar.
+========================================================= */
+const verifScreen = document.getElementById("verifScreen");
+const verifForm = document.getElementById("verifForm");
+const verifDone = document.getElementById("verifDone");
+const verifError = document.getElementById("verifError");
+const verifTitle = document.getElementById("verifTitle");
+const verifIntro = document.getElementById("verifIntro");
+const vSend = document.getElementById("vSend");
+const VER_ARCHIVOS = [["ineFrente","vIneF","INE (frente)"],["ineReverso","vIneR","INE (reverso)"],["domicilio","vDom","El comprobante de domicilio"],["rostro","vRostro","La foto de tu rostro"]];
+let verifFiles = {};
+let verifUnsub = null;
+
+// Validación del dígito verificador de la CLABE (pesos 3-7-1).
+function clabeValida(clabe){
+    if(!/^\d{18}$/.test(clabe)) return false;
+    const pesos = [3,7,1];
+    let suma = 0;
+    for(let i = 0; i < 17; i++) suma += (Number(clabe[i]) * pesos[i % 3]) % 10;
+    return (10 - (suma % 10)) % 10 === Number(clabe[17]);
+}
+
+function comprimirImagen(file){
+    return new Promise((resolve, reject) => {
+        if(!file || !/^image\//.test(file.type)) return reject(new Error("Elige una foto (imagen)."));
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            const max = 1100;
+            const k = Math.min(1, max / Math.max(img.width, img.height));
+            const w = Math.round(img.width * k), h = Math.round(img.height * k);
+            const canvas = document.createElement("canvas");
+            canvas.width = w; canvas.height = h;
+            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(url);
+            let q = .72, data = canvas.toDataURL("image/jpeg", q);
+            while(data.length > 700000 && q > .35){ q -= .1; data = canvas.toDataURL("image/jpeg", q); }
+            data.length > 900000 ? reject(new Error("La imagen es demasiado pesada.")) : resolve(data);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("No se pudo leer la imagen.")); };
+        img.src = url;
+    });
+}
+
+function errorVerif(message){
+    verifError.textContent = message;
+    verifError.classList.remove("hidden");
+}
+
+function limpiarVerificacion(){
+    verifFiles = {};
+    ["vNombre","vCurp","vClabe","vIneF","vIneR","vDom","vRostro"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; });
+    ["vIneFInfo","vIneRInfo","vDomInfo","vRostroInfo"].forEach(id => { const el = document.getElementById(id); if(el) el.textContent = ""; });
+    verifError.classList.add("hidden");
+}
+
+function mostrarVerificacion(estado, motivo){
+    loginScreen.classList.add("hidden");
+    appScreen.classList.add("hidden");
+    verifScreen.classList.remove("hidden");
+    verifError.classList.add("hidden");
+    if(estado === "enviado"){
+        verifTitle.textContent = "Verificación en revisión";
+        verifIntro.textContent = "Ya recibimos tu información.";
+        verifForm.classList.add("hidden");
+        verifDone.classList.remove("hidden");
+    }else{
+        verifTitle.textContent = "Verificación";
+        verifIntro.textContent = "Para trabajar con ISEP.S.A necesitamos verificar tu identidad. Solo se hace una vez.";
+        verifForm.classList.remove("hidden");
+        verifDone.classList.add("hidden");
+        if(estado === "rechazado") errorVerif("Tu verificación fue rechazada" + (motivo ? ": " + motivo : ".") + " Corrige tus datos y vuelve a enviarlos.");
+    }
+    // Cuando administración apruebe, entra solo al panel.
+    if(verifUnsub) verifUnsub();
+    verifUnsub = onSnapshot(doc(db, "tecnicos", currentUser.uid), snap => {
+        const e = snap.exists() && snap.data().verificacion && snap.data().verificacion.estado;
+        if(e === "aprobado" || (snap.exists() && !e)){
+            showToast("Tu verificación fue aprobada.");
+            setTimeout(() => location.reload(), 700);
+        }
+    }, () => {});
+}
+
+VER_ARCHIVOS.forEach(([tipo, inputId, etiqueta]) => {
+    const input = document.getElementById(inputId);
+    const info = document.getElementById(inputId + "Info");
+    input.addEventListener("change", async () => {
+        delete verifFiles[tipo];
+        info.textContent = "";
+        const file = input.files && input.files[0];
+        if(!file) return;
+        info.textContent = "Preparando imagen…";
+        try{
+            verifFiles[tipo] = await comprimirImagen(file);
+            info.textContent = "✔ Lista (" + Math.round(verifFiles[tipo].length * 0.75 / 1024) + " KB)";
+        }catch(error){
+            input.value = "";
+            info.textContent = "";
+            errorVerif(etiqueta + ": " + error.message);
+        }
+    });
+});
+
+async function enviarVerificacion(){
+    if(!currentUser) return;
+    verifError.classList.add("hidden");
+    const nombre = document.getElementById("vNombre").value.trim();
+    const curp = document.getElementById("vCurp").value.trim().toUpperCase();
+    const clabe = document.getElementById("vClabe").value.replace(/\D/g, "");
+    if(nombre.length < 5){ errorVerif("Escribe tu nombre completo."); return; }
+    if(!/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(curp)){ errorVerif("La CURP no es válida (18 caracteres)."); return; }
+    if(!clabeValida(clabe)){ errorVerif("La CLABE no es válida. Revisa que tenga 18 dígitos y que estén bien escritos."); return; }
+    const falta = VER_ARCHIVOS.find(([tipo]) => !verifFiles[tipo]);
+    if(falta){ errorVerif("Falta: " + falta[2].toLowerCase() + "."); return; }
+
+    vSend.disabled = true;
+    vSend.textContent = "Enviando…";
+    try{
+        const uid = currentUser.uid;
+        for(const [tipo] of VER_ARCHIVOS){
+            await setDoc(doc(db, "verificacionTecnicos", uid, "archivos", tipo), { tipo, datos: verifFiles[tipo], creadoEn: serverTimestamp() });
+        }
+        await setDoc(doc(db, "verificacionTecnicos", uid), { uid, nombre, curp, clabe, estado: "enviado", enviadoEn: serverTimestamp() });
+        await updateDoc(doc(db, "tecnicos", uid), { verificacion: { estado: "enviado", enviadoEn: serverTimestamp() } });
+        limpiarVerificacion();          // los datos desaparecen de la pantalla y de la memoria
+        mostrarVerificacion("enviado");
+    }catch(error){
+        console.error(error);
+        errorVerif(error?.code === "permission-denied"
+            ? "Sin permiso en Firestore para enviar la verificación. Avisa a administración (reglas de seguridad)."
+            : "No se pudo enviar (" + (error?.code || error?.message || "error") + "). Inténtalo de nuevo.");
+    }finally{
+        vSend.disabled = false;
+        vSend.textContent = "Enviar verificación";
+    }
+}
+
+vSend.addEventListener("click", enviarVerificacion);
+document.getElementById("verifLogout").addEventListener("click", async () => { try{ await signOut(auth); }catch(error){ console.error(error); } });
+
+/* =========================================================
+   MAP CENTER
+========================================================= */
+centerTechnicianBtn.addEventListener("click", () => {
+    if(!lastPosition){ showToast("Todavía no tenemos tu ubicación."); return; }
+    map.setView([lastPosition.lat, lastPosition.lng], 17);
+});
+
+centerClientBtn.addEventListener("click", () => {
+    if(!currentService) return;
+    const coords = getServiceCoordinates(currentService);
+    if(!coords) return;
+    map.setView([coords.lat, coords.lng], 17);
+    if(clientMarker){ clientMarker.openPopup(); }
+});
+
+/* =========================================================
+   LOGOUT
+========================================================= */
+logoutBtn.addEventListener("click", async () => {
+    stopGPS();
+    cleanupListeners();
+    try{
+        if(currentUser){
+            await updateDoc(doc(db, "tecnicos", currentUser.uid), {
+                gpsactivo: false,
+                gpsestado: "desconectado",
+                ultimaconexion: serverTimestamp(),
+                actualizadoen: serverTimestamp()
+            });
+        }
+    }catch(error){
+        console.error(error);
+    }
+    await signOut(auth);
+});
+
+/* =========================================================
+   CLEANUP
+========================================================= */
+function cleanupListeners(){
+    if(technicianUnsubscribe){ technicianUnsubscribe(); technicianUnsubscribe = null; }
+    if(serviceUnsubscribe){ serviceUnsubscribe(); serviceUnsubscribe = null; }
+    if(trajectoryUnsubscribe){ trajectoryUnsubscribe(); trajectoryUnsubscribe = null; }
+}
+
+/* =========================================================
+   ESCAPE HTML
+========================================================= */
+function escapeHtml(value){
+    return String(value)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+}
+
+/* =========================================================
+   VISIBILITY / BACKGROUND
+========================================================= */
+document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "visible"){
+        map.invalidateSize();
+    }
+});
+
+/* ===== Siguiente paso (según el estatus del servicio), navegación y mapa ===== */
+function refreshNext(){
+    refreshRoute();
+    const b = document.getElementById("nextBtn");
+    if(!b) return;
+    const labels = { 1:"Confirmar servicio", 2:"Salir hacia el cliente", 3:"Llegué · validar PIN", 4:"Finalizar servicio" };
+    const i = curIdx();
+    if(!currentService){ b.disabled = true; b.textContent = "Sin servicio"; return; }
+    if(!labels[i]){ b.disabled = true; b.textContent = "Sin acciones pendientes"; return; }
+    b.disabled = false;
+    b.textContent = labels[i];
+}
+document.getElementById("nextBtn").addEventListener("click", () => {
+    const i = curIdx();
+    if(i === 1) confirmarServicio();
+    else if(i === 2) salirHaciaCliente();
+    else if(i === 3) abrirPin();
+    else if(i === 4) finalizarServicio();
+});
+document.getElementById("navBtn").addEventListener("click", () => {
+    if(!currentService){ showToast("No tienes un servicio asignado."); return; }
+    const c = getServiceCoordinates(currentService);
+    const dest = c ? c.lat + "," + c.lng : (currentService.direccion || "");
+    if(!dest){ showToast("Este servicio no tiene ubicación."); return; }
+    window.open("https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(dest) + "&travelmode=driving", "_blank", "noopener");
+});
+document.getElementById("fullBtn").addEventListener("click", () => {
+    const card = document.getElementById("mapCard"), full = card.classList.toggle("full");
+    document.getElementById("fullBtn").textContent = full ? "Cerrar mapa" : "Pantalla completa";
+    setTimeout(() => map.invalidateSize(), 200);
+});
+
+/* ===== Mostrar ruta (Google Maps) ===== */
+let seenRoute = null;
+function routeLink(){
+    if(!currentService) return "";
+    if(currentService.rutaGoogleMaps?.url) return currentService.rutaGoogleMaps.url;
+    const c = getServiceCoordinates(currentService);
+    const dest = c ? c.lat + "," + c.lng : (currentService.direccion || "");
+    return dest ? "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(dest) + "&travelmode=driving" : "";
+}
+function refreshRoute(){
+    const b = document.getElementById("routeBtn"), n = document.getElementById("routeNote");
+    if(!b) return;
+    const r = currentService?.rutaGoogleMaps;
+    b.disabled = !routeLink();
+    n.textContent = r?.url ? "Ruta enviada por Logística" + (r.distanciaKm ? " · " + r.distanciaKm + " km · " + r.minutos + " min" : "") : "";
+    const key = currentService ? currentService.id + "|" + (r?.url || "") : "";
+    if(seenRoute !== null && key !== seenRoute && r?.url) showToast("Logística te envió una ruta.");
+    seenRoute = key;
+}
+document.getElementById("routeBtn").addEventListener("click", () => {
+    const url = routeLink();
+    if(!url){ showToast("Este servicio no tiene ubicación."); return; }
+    window.open(url, "_blank", "noopener");
+});
+</script>
+<script>
+(function(){var b=document.createElement('div');b.id='isepNet';b.setAttribute('role','status');b.setAttribute('aria-live','polite');document.body.appendChild(b);var t;function s(){clearTimeout(t);if(navigator.onLine){if(b.classList.contains('show')){b.className='show ok';b.textContent='Conexión restablecida';t=setTimeout(function(){b.className=''},2500)}}else{b.className='show';b.textContent='Sin conexión. Algunas acciones no funcionarán hasta que vuelva la red.'}}window.addEventListener('online',s);window.addEventListener('offline',s);if(!navigator.onLine)s()})();
+</script>
+</body>
+</html>

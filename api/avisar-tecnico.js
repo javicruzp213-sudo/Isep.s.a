@@ -65,6 +65,8 @@ module.exports = async (req, res) => {
       try { body = JSON.parse(body); } catch (e) { body = {}; }
     }
     const folio = String((body && body.folio) || '').trim();
+    const TIPOS = ['pago', 'asignacion', 'pago_recibido', 'garantia'];
+    const tipo = TIPOS.includes(body && body.tipo) ? body.tipo : 'pago';
     if (!folio || folio.length > 100 || folio.includes('/')) {
       return res.status(400).json({ error: 'Falta el folio' });
     }
@@ -84,19 +86,37 @@ module.exports = async (req, res) => {
       return res.status(200).json({ enviado: false, motivo: 'El técnico no activó notificaciones en su celular' });
     }
 
-    // El texto sale de lo que administración guardó en la solicitud, no de lo que mande el navegador.
-    const texto = String(d.recordatorioPagoTecnicoTexto ||
-      'Administración marcó este pago en línea como no recibido. Revisa tu panel.').slice(0, 180);
+    // El texto sale de lo que hay guardado en la solicitud, no de lo que mande el navegador.
+    let titulo, texto;
+    if (tipo === 'asignacion') {
+      const lugar = typeof d.direccion === 'string' ? d.direccion : '';
+      titulo = `ISEP · Nueva solicitud asignada · Folio ${folio}`;
+      texto = (lugar ? `Dirección: ${lugar}. ` : '') + 'Ábrela en tu panel.';
+    } else if (tipo === 'pago_recibido') {
+      titulo = `ISEP · Pago recibido · Folio ${folio}`;
+      texto = String(d.pagoRecibidoAvisoTecnicoTexto ||
+        'Administración registró el pago de este servicio como recibido.');
+    } else if (tipo === 'garantia') {
+      titulo = `ISEP · Garantía lista para enviar · Folio ${folio}`;
+      texto = String(d.garantiaAvisoTecnicoTexto ||
+        'Administración registró la garantía. Envíala al cliente desde tu panel.');
+    } else {
+      titulo = `ISEP · Pago pendiente · Folio ${folio}`;
+      texto = String(d.recordatorioPagoTecnicoTexto ||
+        'Administración marcó este pago en línea como no recibido. Revisa tu panel.');
+    }
+    texto = texto.slice(0, 180);
 
     try {
       await admin.messaging().send({
         token,
-        notification: { title: `ISEP · Pago pendiente · Folio ${folio}`, body: texto },
+        notification: { title: titulo, body: texto },
         webpush: {
           notification: {
             icon: `${SITIO_TECNICO}icon-192.png`,
-            tag: `pago-${folio}`,
+            tag: `${tipo}-${folio}`,
             renotify: true,
+            requireInteraction: tipo === 'asignacion',
             vibrate: [200, 100, 200]
           },
           fcmOptions: { link: SITIO_TECNICO }

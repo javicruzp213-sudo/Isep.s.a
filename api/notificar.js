@@ -18,7 +18,7 @@ const SITIO = 'https://isep-s-a.vercel.app/';
 // Páginas autorizadas para llamar a esta función (sin "/" al final).
 const ORIGENES_PERMITIDOS = [
   'https://isep-s-a.vercel.app',
-  'https://tecnicoadm.netlify.app',
+  'https://tecnicosisep.netlify.app/',
   ...(process.env.ORIGENES_EXTRA || '')
     .split(',')
     .map(s => s.trim().replace(/\/$/, ''))

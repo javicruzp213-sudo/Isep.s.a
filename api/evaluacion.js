@@ -27,7 +27,7 @@ const CATS = {
   clima: 'técnico en aire acondicionado y climatización (refrigerantes, mantenimiento, diagnóstico)'
 };
 const N = 10, SEG = 45, GRACIA = 4, APRUEBA = 70, MAX_INCIDENTES = 3, ESPERA_DIAS = 30;
-const MODELO = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+const MODELO = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 const sha = t => crypto.createHash('sha256').update(String(t)).digest('hex');
 const mezclar = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };

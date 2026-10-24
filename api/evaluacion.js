@@ -71,7 +71,13 @@ const acciones = {
       if (Date.now() - ms(p.finEn) < ESPERA_DIAS * 86400000) throw new Err(409, `Podrás volver a intentarlo ${ESPERA_DIAS} días después de tu evaluación.`);
     }
     const banco = await db().collection('bancoPreguntas').where('categoria', '==', b.categoria).where('estado', '==', 'aprobada').get();
-    if (banco.size < N) throw new Err(503, 'La evaluación de esta categoría aún no está disponible.');
+    if (banco.size < N) {
+      // Aviso solo para los logs de Vercel: el aspirante sigue viendo el mismo mensaje.
+      let pendientes = '?';
+      try { pendientes = (await db().collection('bancoPreguntas').where('categoria', '==', b.categoria).where('estado', '==', 'pendiente').get()).size; } catch (e) { /* solo informativo */ }
+      console.warn(`[evaluacion] Categoría "${b.categoria}" no disponible: ${banco.size} aprobadas de ${N} necesarias (${pendientes} pendientes de revisar).`);
+      throw new Err(503, 'La evaluación de esta categoría aún no está disponible.');
+    }
     const token = crypto.randomBytes(24).toString('hex');
     const ref = await db().collection('aspirantes').add({
       nombre, telefono: tel, correo, categoria: b.categoria, estado: 'evaluando', tokenHash: sha(token),

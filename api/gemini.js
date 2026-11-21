@@ -1,31 +1,33 @@
-// api/gemini.js — Asistente Ampi con herramienta para crear solicitudes.
-// Requiere: npm i firebase-admin
-// Variables de entorno en Vercel: GEMINI_API_KEY, FIREBASE_SERVICE_ACCOUNT (JSON completo), GEMINI_MODEL (opcional)
+// api/gemini.js — Ampi: asistente que responde, crea / consulta / reagenda / cancela solicitudes y pasa con una persona.
+// Requiere: firebase-admin (ya está en tu package.json).
+// Variables de entorno en Vercel: GEMINI_API_KEY, FIREBASE_SERVICE_ACCOUNT (JSON completo),
+//   opcionales: GEMINI_MODEL, GEMINI_THINKING, ISEP_DEBUG=1 (muestra el error técnico en el chat mientras pruebas)
 import crypto from 'crypto';
 import admin from 'firebase-admin';
 
-// Si falta FIREBASE_SERVICE_ACCOUNT, el chat sigue respondiendo preguntas pero sin crear solicitudes.
+// Si falta FIREBASE_SERVICE_ACCOUNT, el chat sigue respondiendo preguntas pero sin acciones sobre solicitudes.
 let db = null;
 try {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
   db = admin.firestore();
-} catch (e) { console.warn('Firebase Admin no configurado: Ampi no podrá crear solicitudes', e.message); }
+} catch (e) { console.warn('Firebase Admin no configurado: Ampi no podrá hacer acciones', e.message); }
 const CREAR_OK = !!db;
+
 const MODELO = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
-// Flash-Lite 3.5 usa por defecto thinking "minimal"; con herramientas conviene "medium" para que no se salte la llamada.
 const THINKING = process.env.GEMINI_THINKING || 'medium';
 const TZ = 'America/Mexico_City';
-const MAX_SOLICITUDES_POR_HORA = 3;
 
-// ===== PEGA AQUÍ tu línea 20 vieja =====
-// Borra la línea "const instrucciones = ..." de abajo y pega en su lugar la línea 20 completa de tu archivo anterior
-// (empieza con: const instrucciones = `Eres el asistente de ISEP...  y termina con ${mensaje}`; ).
-const mensaje = ''; // (necesario para que tu línea vieja funcione; no lo borres)
+// ---- Reglas de negocio (ajústalas aquí) ----
+const MAX_SOLICITUDES_POR_HORA = 3;   // solicitudes nuevas por IP
+const MAX_ESCALACIONES_POR_HORA = 5;  // "pasar con una persona" por IP
+const MAX_FALLOS_POR_HORA = 5;        // folio/teléfono incorrectos por IP
+const CANCELAR_HASTA_IDX = 1;         // 0 sin asignar, 1 técnico asignado  (después: lo ve una persona)
+const REAGENDAR_HASTA_IDX = 2;        // hasta "Confirmado"; si ya va en camino: lo ve una persona
+const HORA_INI = 8, HORA_FIN = 20;      // la visita se agenda en horas exactas, de 8:00 a. m. a 8:00 p. m.
+const STATUS = ['Técnico sin asignar', 'Técnico asignado', 'Confirmado', 'En camino', 'En servicio', 'Finalizado'];
 
-  const instrucciones = `Eres el asistente de ISEP, S.A., una empresa de electricistas que da servicio a domicilio en toda la República Mexicana, con mayor cobertura en Tabasco. Responde breve y claro en español, en tono profesional y amable. Escribe en texto plano: no uses Markdown, no uses asteriscos, guiones bajos, numerales ni tablas. Mensaje del cliente: ${mensaje}`;
-
-// ===== FIN =====
-const INFO_EMPRESA = instrucciones.replace(/\s*Mensaje del cliente:\s*$/i, '');
+// Tus instrucciones de siempre para Ampi:
+const INFO_EMPRESA = `Eres el asistente de ISEP, S.A., una empresa de electricistas que da servicio a domicilio en toda la República Mexicana, con mayor cobertura en Tabasco. Responde breve y claro en español, en tono profesional y amable. Escribe en texto plano: no uses Markdown, no uses asteriscos, guiones bajos, numerales ni tablas.`;
 
 const SERVICIOS = {
   corto:'Corto circuito / emergencia', sin_luz:'Me quedé sin luz en casa o en una parte', falla_tierra:'Descargas o toques eléctricos',
@@ -47,27 +49,57 @@ const SERVICIOS = {
 };
 const IDS = Object.keys(SERVICIOS);
 
-const DECL = {
-  name: 'crear_solicitud',
-  description: 'Registra una solicitud de servicio eléctrico en administración. Llámala SOLO cuando tengas todos los datos y el cliente haya confirmado el resumen con un "sí" explícito.',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      nombre: { type: 'STRING', description: 'Nombre completo del cliente' },
-      telefono: { type: 'STRING', description: 'Teléfono a 10 dígitos' },
-      correo: { type: 'STRING', description: 'Correo electrónico' },
-      servicios: { type: 'ARRAY', items: { type: 'STRING', enum: IDS }, description: 'Ids de los servicios que necesita' },
-      servicio_otro: { type: 'STRING', description: 'Descripción si eligió "otro"' },
-      detalle: { type: 'STRING', description: 'Detalles de la falla o trabajo (opcional)' },
-      direccion: { type: 'STRING', description: 'Dirección completa: calle, número, colonia, ciudad' },
-      fecha: { type: 'STRING', description: 'Fecha de la visita en formato YYYY-MM-DD' },
-      hora: { type: 'STRING', description: 'Hora de la visita en formato HH:MM de 24 horas' },
+/* ---------- herramientas que Ampi puede usar ---------- */
+const S = (description) => ({ type: 'STRING', description });
+const DECLS = [
+  {
+    name: 'crear_solicitud',
+    description: 'Registra una solicitud NUEVA de servicio eléctrico. Llámala SOLO con todos los datos y después de que el cliente confirme el resumen con un "sí".',
+    parameters: { type: 'OBJECT', properties: {
+      nombre: S('Nombre completo'), telefono: S('Teléfono a 10 dígitos'), correo: S('Correo electrónico'),
+      servicios: { type: 'ARRAY', items: { type: 'STRING', enum: IDS }, description: 'Ids de servicio' },
+      servicio_otro: S('Descripción si eligió "otro"'), detalle: S('Detalles de la falla (opcional)'),
+      direccion: S('Dirección completa: calle, número, colonia, ciudad'),
+      fecha: S('Fecha de la visita YYYY-MM-DD'), hora: S('Hora exacta de la visita HH:00 (24 h), entre 08:00 y 20:00'),
       urgente: { type: 'BOOLEAN', description: 'true si hay corto, chispas u olor a quemado' },
+      factura: { type: 'BOOLEAN', description: 'true si el cliente pidió factura' },
+      rfc: S('RFC (solo si pidió factura)'), tipo_persona: { type: 'STRING', enum: ['fisica', 'moral'], description: 'Persona física (RFC de 13 caracteres) o moral (12). Solo si pidió factura' },
       confirmado: { type: 'BOOLEAN', description: 'true SOLO si el cliente ya confirmó el resumen' }
-    },
-    required: ['nombre', 'telefono', 'correo', 'servicios', 'direccion', 'fecha', 'hora', 'confirmado']
+    }, required: ['nombre', 'telefono', 'correo', 'servicios', 'direccion', 'fecha', 'hora', 'confirmado'] }
+  },
+  {
+    name: 'consultar_estatus',
+    description: 'Consulta el estatus de una solicitud existente. Requiere el folio y el teléfono con el que se hizo.',
+    parameters: { type: 'OBJECT', properties: { folio: S('Folio, ej. CC-20261114-AB12CD34'), telefono: S('Teléfono de 10 dígitos de la solicitud') }, required: ['folio', 'telefono'] }
+  },
+  {
+    name: 'reagendar_solicitud',
+    description: 'Cambia la fecha y hora de la visita de una solicitud existente. Llámala SOLO después de que el cliente confirme la nueva fecha y hora con un "sí".',
+    parameters: { type: 'OBJECT', properties: {
+      folio: S('Folio'), telefono: S('Teléfono de 10 dígitos de la solicitud'),
+      fecha: S('Nueva fecha YYYY-MM-DD'), hora: S('Nueva hora exacta HH:00 (24 h), entre 08:00 y 20:00'),
+      confirmado: { type: 'BOOLEAN', description: 'true SOLO si el cliente ya confirmó' }
+    }, required: ['folio', 'telefono', 'fecha', 'hora', 'confirmado'] }
+  },
+  {
+    name: 'cancelar_solicitud',
+    description: 'Cancela una solicitud existente. Llámala SOLO después de que el cliente confirme con un "sí" que quiere cancelarla.',
+    parameters: { type: 'OBJECT', properties: {
+      folio: S('Folio'), telefono: S('Teléfono de 10 dígitos de la solicitud'), motivo: S('Motivo de la cancelación (opcional)'),
+      confirmado: { type: 'BOOLEAN', description: 'true SOLO si el cliente ya confirmó' }
+    }, required: ['folio', 'telefono', 'confirmado'] }
+  },
+  {
+    name: 'pasar_a_humano',
+    description: 'Registra el caso y pasa al cliente con una persona (botones de llamada y WhatsApp). Úsala cuando no puedas resolver, haya queja, enojo, pago o cobro en disputa, emergencia, cambio de dirección o de servicio, o el cliente pida hablar con alguien.',
+    parameters: { type: 'OBJECT', properties: {
+      destino: { type: 'STRING', enum: ['administracion', 'tecnico'], description: 'administracion por defecto; tecnico si es algo de la visita en curso (retraso, ubicación, llegada) y ya hay técnico asignado' },
+      motivo: S('Motivo corto'), resumen: S('Resumen de lo hablado para que la persona no tenga que preguntar de nuevo'),
+      folio: S('Folio si lo conoces'), telefono: S('Teléfono del cliente si lo dio'),
+      urgente: { type: 'BOOLEAN', description: 'true si hay riesgo eléctrico o es una emergencia' }
+    }, required: ['destino', 'motivo', 'resumen'] }
   }
-};
+];
 
 /* ---------- utilidades ---------- */
 const hoyMx = () => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -78,10 +110,18 @@ function fechaLegible(iso) {
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
 function horaLegible(h) { const [H, M] = h.split(':').map(Number); return `${H % 12 || 12}:${String(M).padStart(2, '0')} ${H >= 12 ? 'p. m.' : 'a. m.'}`; }
+const tel10 = (x) => { let t = String(x || '').replace(/\D/g, ''); if (t.length === 12 && t.startsWith('52')) t = t.slice(2); return t; };
 function genFolio() {
   const abc = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let code = ''; while (code.length < 8) code += abc[crypto.randomInt(abc.length)];
   return `CC-${hoyMx().replace(/-/g, '')}-${code}`;
+}
+function validarFechaHora(fecha, hora) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '') || isNaN(new Date(fecha + 'T12:00:00Z'))) return 'La fecha no es válida (usa YYYY-MM-DD).';
+  if (!/^([01]\d|2[0-3]):00$/.test(hora || '') || Number(hora.slice(0, 2)) < HORA_INI || Number(hora.slice(0, 2)) > HORA_FIN) return 'Las visitas se agendan en horas exactas entre las 8:00 a. m. y las 8:00 p. m. (formato HH:00).';
+  if (fecha < hoyMx()) return 'Esa fecha ya pasó.';
+  if (fecha === hoyMx() && hora < horaMx()) return 'Esa hora ya pasó.';
+  return null;
 }
 async function geocodificar(direccion) {
   const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
@@ -92,94 +132,252 @@ async function geocodificar(direccion) {
     return d && d[0] ? { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) } : null;
   } catch (e) { return null; } finally { clearTimeout(t); }
 }
-async function limiteOk(ip) {
-  const id = crypto.createHash('sha256').update(ip || 'sin-ip').digest('hex').slice(0, 32);
-  const ref = db.collection('limites_chat').doc(id);
+// Estatus 0-5 (misma lógica que la página del cliente)
+function idxEstatus(d) {
+  const quitar = t => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const alias = { sinasignar: 0, tecnicosinasignar: 0, sintecnico: 0, pendiente: 0, recibido: 0, nuevo: 0, solicitado: 0, asignado: 1, tecnicoasignado: 1, confirmado: 2, aceptado: 2, programado: 2, encamino: 3, enruta: 3, camino: 3, enservicio: 4, enproceso: 4, iniciado: 4, trabajando: 4, llegue: 4, llegado: 4, finalizado: 5, completado: 5, terminado: 5, concluido: 5, listo: 5, hecho: 5 };
+  const campos = [d.estatus, d.status, d.estado, d.statusNombre, d.estatusNombre, d.statusIdx, d.statusIndex];
+  for (const v of campos) { if (typeof v !== 'string' || !v) continue; const k = quitar(v); if (k in alias) return alias[k]; }
+  for (const v of campos) { if (v === undefined || v === null || v === '') continue; const n = Number(v); if (Number.isInteger(n) && n >= 0 && n <= 5) return n; }
+  return d.tecnicoNombre ? 1 : 0;
+}
+
+/* ---------- límites por IP (guardados en Firestore: ' limites_chat ') ---------- */
+const idIp = (ip, clave) => crypto.createHash('sha256').update((ip || 'sin-ip') + ':' + clave).digest('hex').slice(0, 32);
+async function tomarCupo(ip, clave, max) {
+  const ref = db.collection('limites_chat').doc(idIp(ip, clave));
   return db.runTransaction(async tx => {
     const s = await tx.get(ref), ahora = Date.now();
     const ts = (s.exists ? s.data().ts : []).filter(x => ahora - x < 3600000);
-    if (ts.length >= MAX_SOLICITUDES_POR_HORA) return false;
+    if (ts.length >= max) return false;
     ts.push(ahora); tx.set(ref, { ts }); return true;
   });
 }
+async function fallosBloqueado(ip) {
+  const s = await db.collection('limites_chat').doc(idIp(ip, 'fallos')).get();
+  const ahora = Date.now(); return (s.exists ? s.data().ts : []).filter(x => ahora - x < 3600000).length >= MAX_FALLOS_POR_HORA;
+}
+async function registrarFallo(ip) {
+  const ref = db.collection('limites_chat').doc(idIp(ip, 'fallos'));
+  await db.runTransaction(async tx => {
+    const s = await tx.get(ref), ahora = Date.now();
+    const ts = (s.exists ? s.data().ts : []).filter(x => ahora - x < 3600000); ts.push(ahora); tx.set(ref, { ts });
+  });
+}
 
-/* ---------- validación + creación (aquí decide el servidor, no el modelo) ---------- */
-const AFIRMA = /(^|[^a-záéíóúñ])(s[ií]|claro|confirm\w*|correcto|adelante|dale|ok|env[ií]a\w*|perfecto|as[ií] es)(?![a-záéíóúñ])/i;
+/* ---------- aviso push al técnico asignado (mismo sitio e ícono que api/avisar-tecnico.js) ---------- */
+const SITIO_TECNICO = 'https://tecnicosisep.netlify.app/';
+const TOKEN_INVALIDO = ['messaging/registration-token-not-registered', 'messaging/invalid-registration-token'];
+async function avisarTecnico(d, folio, titulo, texto, tag) {
+  if (!db || !d || !d.tecnicoUid) return false;
+  try {
+    const ref = db.collection('tecnicos').doc(d.tecnicoUid), t = await ref.get();
+    const token = t.exists ? t.data().fcmToken : null;
+    if (!token) return false;
+    try {
+      await admin.messaging().send({
+        token, notification: { title: titulo, body: String(texto).slice(0, 180) },
+        webpush: { notification: { icon: `${SITIO_TECNICO}icon-192.png`, tag: `${tag}-${folio}`, renotify: true, vibrate: [200, 100, 200] }, fcmOptions: { link: SITIO_TECNICO } }
+      });
+      return true;
+    } catch (e) {
+      if (TOKEN_INVALIDO.includes(e.code)) await ref.update({ fcmToken: admin.firestore.FieldValue.delete() });
+      else console.warn('push al técnico', e.message);
+      return false;
+    }
+  } catch (e) { console.warn('push al técnico', e.message); return false; }   // un fallo del aviso nunca rompe la acción principal
+}
 
-async function crearSolicitud(a, ultimoUsuario, ip) {
-  if (a.confirmado !== true || !AFIRMA.test(ultimoUsuario || '')) return { error: 'Falta que el cliente confirme el resumen con un "sí". Muéstrale el resumen y pídele confirmación.' };
-  const nombre = String(a.nombre || '').trim();
-  if (nombre.length < 3) return { error: 'Falta el nombre completo.' };
-  let tel = String(a.telefono || '').replace(/\D/g, ''); if (tel.length === 12 && tel.startsWith('52')) tel = tel.slice(2);
-  if (tel.length !== 10) return { error: 'El teléfono debe tener 10 dígitos.' };
-  const correo = String(a.correo || '').trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return { error: 'El correo no es válido.' };
+/* ---------- acciones (aquí decide el servidor, no el modelo) ---------- */
+const AFIRMA = /(^|[^a-záéíóúñ])(s[ií]|claro|confirm\w*|correcto|adelante|dale|ok|env[ií]a\w*|cancela\w*|perfecto|as[ií] es)(?![a-záéíóúñ])/i;
+const necesitaConfirmar = (a, ctx) => (a.confirmado !== true || !AFIRMA.test(ctx.ultimoUsuario || ''))
+  ? { error: 'Falta que el cliente confirme con un "sí". Muéstrale el resumen de lo que vas a hacer y pídele confirmación.' } : null;
+
+async function crearSolicitud(a, ctx) {
+  const c = necesitaConfirmar(a, ctx); if (c) return c;
+  const nombre = String(a.nombre || '').trim(); if (nombre.length < 3) return { error: 'Falta el nombre completo.' };
+  const tel = tel10(a.telefono); if (tel.length !== 10) return { error: 'El teléfono debe tener 10 dígitos.' };
+  const correo = String(a.correo || '').trim(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) return { error: 'El correo no es válido.' };
   const servicios = [...new Set(Array.isArray(a.servicios) ? a.servicios : [])].filter(id => SERVICIOS[id]);
   if (!servicios.length) return { error: 'Falta al menos un servicio de la lista.' };
   const otro = String(a.servicio_otro || '').trim().slice(0, 120);
   if (servicios.includes('otro') && otro.length < 3) return { error: 'Describe qué servicio es "otro".' };
-  const direccion = String(a.direccion || '').trim();
-  if (direccion.length < 6) return { error: 'Falta la dirección completa.' };
-  const fecha = String(a.fecha || ''), hora = String(a.hora || '');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || isNaN(new Date(fecha + 'T12:00:00Z'))) return { error: 'La fecha no es válida (usa YYYY-MM-DD).' };
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return { error: 'La hora no es válida (usa HH:MM).' };
-  if (fecha < hoyMx()) return { error: 'Esa fecha ya pasó.' };
-  if (fecha === hoyMx() && hora < horaMx()) return { error: 'Esa hora ya pasó.' };
-
-  if (!(await limiteOk(ip))) return { error: 'Se alcanzó el límite de solicitudes por chat. Pide al cliente que escriba por WhatsApp.' };
-
+  const direccion = String(a.direccion || '').trim(); if (direccion.length < 6) return { error: 'Falta la dirección completa.' };
+  const errFH = validarFechaHora(String(a.fecha || ''), String(a.hora || '')); if (errFH) return { error: errFH };
+  let factura = null;
+  if (a.factura === true) {
+    const rfc = String(a.rfc || '').trim().toUpperCase(), tipo = a.tipo_persona === 'moral' ? 'moral' : (a.tipo_persona === 'fisica' ? 'fisica' : '');
+    if (!/^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/.test(rfc)) return { error: 'El RFC no es válido (persona física 13 caracteres, persona moral 12).' };
+    if (!tipo) return { error: 'Pregunta si es persona física o persona moral.' };
+    if ((tipo === 'fisica' && rfc.length !== 13) || (tipo === 'moral' && rfc.length !== 12)) return { error: `El RFC no coincide con persona ${tipo === 'fisica' ? 'física (13 caracteres)' : 'moral (12 caracteres)'}. Verifícalo con el cliente.` };
+    factura = { rfc, tipoPersona: tipo, correo };
+  }
+  if (!(await tomarCupo(ctx.ip, 'nuevas', MAX_SOLICITUDES_POR_HORA))) return { error: 'Se alcanzó el límite de solicitudes por chat. Pasa al cliente con administración.' };
+  const fecha = String(a.fecha), hora = String(a.hora);
   const geo = await geocodificar(direccion);
   const base = {
-    nombre, telefono: tel, correo, servicios,
-    serviciosNombres: servicios.map(id => SERVICIOS[id]),
-    servicioOtro: servicios.includes('otro') ? otro : '',
-    detalleServicio: String(a.detalle || '').trim().slice(0, 500),
+    nombre, telefono: tel, correo, servicios, serviciosNombres: servicios.map(id => SERVICIOS[id]),
+    servicioOtro: servicios.includes('otro') ? otro : '', detalleServicio: String(a.detalle || '').trim().slice(0, 500),
     direccion, geo: geo || null, tecnicoGeo: null,
     fecha, hora, fechaLegible: fechaLegible(fecha), horaLegible: horaLegible(hora),
-    urgente: a.urgente === true,
-    pin: String(crypto.randomInt(1000, 10000)),
-    statusIdx: 0, estatus: 'Técnico sin asignar', tecnicoNombre: null,
-    fcmToken: null, cotizacion: null, descuento: null,
-    origen: 'ampi-chat', createdAt: Date.now()
+    urgente: a.urgente === true, factura, fotosCount: 0,
+    pin: String(crypto.randomInt(1000, 10000)), statusIdx: 0, estatus: STATUS[0], tecnicoNombre: null,
+    fcmToken: null, cotizacion: null, descuento: null, origen: 'ampi-chat', createdAt: Date.now()
   };
   for (let i = 0; i < 5; i++) {
     const folio = genFolio();
-    try { await db.collection('solicitudes').doc(folio).create({ folio, ...base }); return { ok: true, folio, nombre }; }
-    catch (e) { if (e.code !== 6 /* ALREADY_EXISTS */) { console.error('crear_solicitud', e); return { error: 'No se pudo guardar. Intenta de nuevo.' }; } }
+    try {
+      await db.collection('solicitudes').doc(folio).create({ folio, ...base });
+      return { ok: true, final: true, extra: { folio },
+        texto: `✅ Listo, ${nombre.split(' ')[0]}. Tu solicitud quedó registrada con el folio ${folio}. Un electricista la revisará y confirmará pronto. Puedes seguirla en "Rastrear mi folio".` };
+    } catch (e) { if (e.code !== 6) { console.error('crear_solicitud', e); return { error: 'No se pudo guardar. Intenta de nuevo.' }; } }
   }
   return { error: 'No se pudo generar el folio. Intenta de nuevo.' };
 }
 
-/* ---------- Gemini ---------- */
-function sistema() {
-  const hoy = hoyMx();
-  return `Eres Ampi, la cuija electricista, asistente virtual de ISEP. Habla en español, cálida y breve (máx. 4 líneas por mensaje).
-${INFO_EMPRESA}
-Hoy es ${fechaLegible(hoy)} (${hoy}) y son las ${horaMx()} en hora de México.
-
-${CREAR_OK ? `SI EL CLIENTE QUIERE UN SERVICIO, puedes registrarle la solicitud con la herramienta crear_solicitud:
-- Pide los datos que falten, máximo 2 por mensaje: nombre completo, teléfono (10 dígitos), correo, qué servicio necesita, dirección completa, fecha y hora de la visita.
-- Elige los ids de servicio de esta lista (si no encaja, usa "otro"):
-${IDS.map(id => `  ${id}: ${SERVICIOS[id]}`).join('\n')}
-- Marca urgente=true solo si hay corto, chispas u olor a quemado, y recuérdale: aleje a todos, no toque nada y baje el interruptor general si es seguro.
-- No inventes datos ni los supongas. Cuando los tengas todos, muestra un resumen y pregunta "¿Confirmas que la envíe?".
-- Llama a crear_solicitud con confirmado=true SOLO después de que el cliente responda que sí. Nunca la llames antes.
-- No prometas precios ni horarios exactos de llegada; el técnico confirma.` : ''}
-No uses formato Markdown (nada de asteriscos, negritas ni encabezados): escribe texto plano.`;
+// Verifica folio + teléfono (con límite de intentos fallidos por IP)
+async function verificar(a, ctx) {
+  const folio = String(a.folio || '').trim().toUpperCase();
+  if (!/^[A-Z0-9-]{6,40}$/.test(folio)) return { error: 'El folio no tiene un formato válido. Pídeselo al cliente (está en su ticket).' };
+  const tel = tel10(a.telefono); if (tel.length !== 10) return { error: 'Falta el teléfono de 10 dígitos con el que se hizo la solicitud.' };
+  if (await fallosBloqueado(ctx.ip)) return { error: 'Demasiados intentos de verificación. Usa pasar_a_humano con destino "administracion".' };
+  const ref = db.collection('solicitudes').doc(folio), s = await ref.get();
+  if (!s.exists || tel10(s.data().telefono) !== tel) { await registrarFallo(ctx.ip); return { error: 'No encontré una solicitud con ese folio y teléfono. Pídele al cliente que los revise.' }; }
+  return { ref, d: s.data(), folio, tel };
 }
-async function gemini(contents) {
+
+async function consultarEstatus(a, ctx) {
+  const v = await verificar(a, ctx); if (v.error) return v;
+  const d = v.d, idx = idxEstatus(d), monto = Number(d.montoCobrado) || 0;
+  return { ok: true, datos: {
+    folio: v.folio, estatus: d.cancelada ? 'Cancelada' : STATUS[idx], tecnico: d.tecnicoNombre || null,
+    visita: d.fecha && d.hora ? `${fechaLegible(d.fecha)} a las ${horaLegible(d.hora)}` : null,
+    urgente: !!d.urgente, reprogramada: !!d.reprogramada,
+    pago: monto > 0 ? (d.pagado ? 'pagado' : `pendiente: $${monto} MXN`) : 'sin cobro registrado',
+    puedeReagendar: !d.cancelada && idx <= REAGENDAR_HASTA_IDX, puedeCancelar: !d.cancelada && idx <= CANCELAR_HASTA_IDX
+  } };
+}
+
+async function reagendar(a, ctx) {
+  const c = necesitaConfirmar(a, ctx); if (c) return c;
+  const v = await verificar(a, ctx); if (v.error) return v;
+  const fecha = String(a.fecha || ''), hora = String(a.hora || '');
+  const errFH = validarFechaHora(fecha, hora); if (errFH) return { error: errFH };
+  let datos = null;
+  const r = await db.runTransaction(async t => {
+    const s = await t.get(v.ref), d = s.data(), idx = idxEstatus(d);
+    if (d.cancelada) return { error: 'Esa solicitud ya está cancelada.' };
+    if (idx > REAGENDAR_HASTA_IDX) return { error: `Ya no se puede reagendar por el chat (estatus: ${STATUS[idx]}). Usa pasar_a_humano con destino "tecnico".` };
+    t.update(v.ref, { fecha, hora, fechaLegible: fechaLegible(fecha), horaLegible: horaLegible(hora),
+      reprogramada: true, reprogramaciones: admin.firestore.FieldValue.increment(1), reprogramadaEn: Date.now(), reprogramadaPor: 'ampi-chat' });
+    datos = d;
+    return { ok: true, final: true, extra: { folio: v.folio },
+      texto: `✅ Listo. Tu visita del folio ${v.folio} quedó para el ${fechaLegible(fecha)} a las ${horaLegible(hora)}.${idx >= 1 ? ' La nueva fecha ya está actualizada en el sistema para tu técnico.' : ''}` };
+  });
+  if (r.ok && datos) await avisarTecnico(datos, v.folio, `ISEP · El cliente cambió la fecha · Folio ${v.folio}`, `Nueva visita: ${fechaLegible(fecha)} a las ${horaLegible(hora)}.`, 'reprogramada');
+  return r;
+}
+
+async function cancelar(a, ctx) {
+  const c = necesitaConfirmar(a, ctx); if (c) return c;
+  const v = await verificar(a, ctx); if (v.error) return v;
+  let datos = null;
+  const r = await db.runTransaction(async t => {
+    const s = await t.get(v.ref), d = s.data(), idx = idxEstatus(d);
+    if (d.cancelada) return { error: 'Esa solicitud ya estaba cancelada.' };
+    if (idx > CANCELAR_HASTA_IDX) return { error: `Ya no se puede cancelar por el chat (estatus: ${STATUS[idx]}). Usa pasar_a_humano con destino "administracion".` };
+    t.update(v.ref, { cancelada: true, estatus: 'Cancelado', canceladaEn: Date.now(), canceladaPor: 'ampi-chat', motivoCancelacion: String(a.motivo || '').trim().slice(0, 200) });
+    datos = d;
+    return { ok: true, final: true, extra: { folio: v.folio }, texto: `Tu solicitud ${v.folio} quedó cancelada. Si necesitas un servicio más adelante, aquí estaré para ayudarte.` };
+  });
+  if (r.ok && datos) await avisarTecnico(datos, v.folio, `ISEP · Solicitud cancelada · Folio ${v.folio}`, 'El cliente canceló esta solicitud. Ya no necesitas ir.', 'cancelada');
+  return r;
+}
+
+// Registra el caso para que administración lo vea y devuelve los botones de llamada/WhatsApp al cliente
+async function registrarEscalacion({ destino, motivo, resumen, folio, telefono, urgente }, ctx) {
+  destino = destino === 'tecnico' ? 'tecnico' : 'administracion';
+  if (db && await tomarCupo(ctx.ip, 'humano', MAX_ESCALACIONES_POR_HORA)) {
+    const doc = { estado: 'pendiente', destino, motivo: String(motivo || '').slice(0, 200), resumen: String(resumen || '').slice(0, 600),
+      folio: null, urgente: urgente === true, origen: 'ampi-chat', createdAt: Date.now() };
+    try {
+      if (folio) {
+        const f = String(folio).trim().toUpperCase(), ref = db.collection('solicitudes').doc(f), s = await ref.get();
+        if (s.exists && tel10(s.data().telefono) === tel10(telefono)) {      // solo se marca si folio y teléfono coinciden
+          doc.folio = f; doc.telefonoCliente = tel10(telefono);
+          await ref.update({ requiereAtencion: true, atencionDestino: destino, atencionMotivo: doc.motivo, atencionEn: Date.now() });
+          if (destino === 'tecnico') await avisarTecnico(s.data(), f, `ISEP · El cliente quiere hablar contigo · Folio ${f}`, `${doc.motivo || 'Atención requerida'}. Llámale desde tu panel.`, 'atencion');
+        }
+      }
+      await db.collection('escalaciones').add(doc);
+    } catch (e) { console.error('escalacion', e); }
+  }
+  return { destino, motivo: String(motivo || '').slice(0, 200), resumen: String(resumen || '').slice(0, 400), folio: folio ? String(folio).trim().toUpperCase() : null, urgente: urgente === true };
+}
+async function pasarAHumano(a, ctx) {
+  const h = await registrarEscalacion(a, ctx);
+  const quien = h.destino === 'tecnico' ? 'tu técnico' : 'administración de ISEP';
+  return { ok: true, final: true, extra: { handoff: h },
+    texto: `Te paso con ${quien}. Ya dejé registrado tu caso con un resumen para que no tengas que repetirlo. Toca «Llamar ahora» o escribe por WhatsApp.${h.urgente ? ' Si hay chispas, humo u olor a quemado: aleja a todos, no toques nada y, si es seguro, baja el interruptor general.' : ''}` };
+}
+
+async function ejecutar(nombre, args, ctx) {
+  try {
+    if (!CREAR_OK) return { error: 'Las acciones no están disponibles por ahora. Usa pasar_a_humano.' };
+    switch (nombre) {
+      case 'crear_solicitud': return await crearSolicitud(args, ctx);
+      case 'consultar_estatus': return await consultarEstatus(args, ctx);
+      case 'reagendar_solicitud': return await reagendar(args, ctx);
+      case 'cancelar_solicitud': return await cancelar(args, ctx);
+      case 'pasar_a_humano': return await pasarAHumano(args, ctx);
+      default: return { error: 'Herramienta desconocida.' };
+    }
+  } catch (e) { console.error('herramienta', nombre, e); return { error: 'Ocurrió un error al hacerlo. Si se repite, usa pasar_a_humano.' }; }
+}
+
+/* ---------- Gemini ---------- */
+function sistema(folios) {
+  const hoy = hoyMx();
+  const acciones = CREAR_OK ? `
+TIENES ESTAS ACCIONES REALES (usa las herramientas, no las simules):
+1) crear_solicitud: para un servicio NUEVO. Pide los datos que falten, máximo 2 por mensaje: nombre completo, teléfono (10 dígitos), correo, servicio, dirección completa, fecha y hora. Si pide factura: su RFC y si es persona física o moral (nada más; administración le pedirá después su constancia fiscal). Las visitas se agendan en horas exactas (por ejemplo 10:00) entre las 8:00 a. m. y las 8:00 p. m. Elige ids de esta lista (si no encaja, "otro"):
+${IDS.map(id => `   ${id}: ${SERVICIOS[id]}`).join('\n')}
+2) consultar_estatus, reagendar_solicitud y cancelar_solicitud: SIEMPRE pide el folio y el teléfono de 10 dígitos con el que se hizo la solicitud (es la verificación). No des datos de una solicitud sin verificar.${folios.length ? `\n   Folios guardados en el dispositivo del cliente (confírmalos con él antes de usarlos): ${folios.join(', ')}.` : ''}
+3) pasar_a_humano: registra el caso y le muestra al cliente los botones para llamar o escribir por WhatsApp.
+REGLAS:
+- Antes de crear, reagendar o cancelar, resume lo que harás y pregunta "¿Confirmas?". Llama a la herramienta con confirmado=true SOLO después de un sí explícito.
+- Reagendar: se puede hasta que el técnico esté confirmado; cancelar: solo si aún no tiene técnico o apenas lo asignaron. Si la herramienta dice que ya no se puede, explícalo y usa pasar_a_humano.
+- Usa pasar_a_humano SIN insistir en intentarlo tú cuando: el cliente lo pida, haya queja o enojo, discusión de cobros/pagos/reembolsos/descuentos, cambio de dirección o de servicio, retraso o problema con la visita en curso (destino "tecnico" si ya hay técnico asignado), una emergencia eléctrica, o si tus herramientas fallan dos veces. Con riesgo eléctrico marca urgente=true.
+- No inventes datos ni los supongas. No prometas precios ni horas exactas de llegada; el técnico confirma.` : '';
+  return `${INFO_EMPRESA}
+Eres Ampi, la cuija electricista, asistente virtual de ISEP. Máximo 4 líneas por mensaje.
+Hoy es ${fechaLegible(hoy)} (${hoy}) y son las ${horaMx()} en hora de México.${acciones}
+Texto plano: sin Markdown, sin asteriscos, sin guiones bajos, sin numerales, sin tablas.`;
+}
+async function llamarGemini(contents, folios, { tools = true, thinking = true } = {}) {
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELO}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: sistema() }] },
-      contents,
-      ...(CREAR_OK ? { tools: [{ functionDeclarations: [DECL] }], toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } : {}),
-      generationConfig: { thinkingConfig: { thinkingLevel: THINKING } } // sin temperature/top_p/top_k: Gemini 3.5 los ignora
+      systemInstruction: { parts: [{ text: sistema(folios) }] }, contents,
+      ...(CREAR_OK && tools ? { tools: [{ functionDeclarations: DECLS }], toolConfig: { functionCallingConfig: { mode: 'AUTO' } } } : {}),
+      ...(thinking ? { generationConfig: { thinkingConfig: { thinkingLevel: THINKING } } } : {})
     })
   });
-  if (!r.ok) throw new Error('gemini ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  if (!r.ok) throw new Error('gemini ' + r.status + ' ' + (await r.text()).slice(0, 300));
   return r.json();
+}
+// Si Gemini rechaza algo (nivel de pensamiento o esquema de herramientas), reintenta más simple para que el chat NUNCA se caiga
+async function gemini(contents, folios) {
+  const intentos = [{}, { thinking: false }, { tools: false, thinking: false }];
+  let ultimo;
+  for (const opt of intentos) { try { return await llamarGemini(contents, folios, opt); } catch (e) { ultimo = e; console.warn('Gemini falló con', JSON.stringify(opt), e.message); } }
+  throw ultimo;
+}
+
+function limpiarMarkdown(texto) {
+  return texto.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/__(.*?)__/g, '$1').replace(/_(.*?)_/g, '$1')
+    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1').replace(/^#{1,6}\s*/gm, '').replace(/^[-*]\s+/gm, '• ').trim();
 }
 
 export default async function handler(req, res) {
@@ -188,9 +386,9 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') return res.status(405).json({ texto: 'Método no permitido.' });
-
   if (!process.env.GEMINI_API_KEY) return res.status(200).json({ texto: 'El asistente aún no está activado: falta configurar GEMINI_API_KEY en Vercel.' });
 
+  const HANDOFF_FALLA = { destino: 'administracion', motivo: 'El asistente no pudo resolver el caso', resumen: '', folio: null, urgente: false };
   try {
     const body = req.body || {};
     let msgs = Array.isArray(body.mensajes) ? body.mensajes : (body.mensaje ? [{ role: 'user', text: body.mensaje }] : []);
@@ -198,45 +396,34 @@ export default async function handler(req, res) {
     while (msgs.length && msgs[0].role !== 'user') msgs.shift();
     const ultimoUsuario = [...msgs].reverse().find(m => m.role === 'user')?.text || '';
     if (!ultimoUsuario) return res.status(400).json({ texto: 'Escribe tu pregunta.' });
+    const folios = (Array.isArray(body.contexto?.folios) ? body.contexto.folios : []).map(String).filter(f => /^[A-Z0-9-]{6,40}$/.test(f)).slice(0, 3);
 
-    const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const ctx = { ultimoUsuario, ip: String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() };
     const contents = msgs.map(m => ({ role: m.role, parts: [{ text: m.text }] }));
 
-    for (let i = 0; i < 3; i++) {
-      const data = await gemini(contents);
+    for (let i = 0; i < 4; i++) {
+      const data = await gemini(contents, folios);
       const content = data.candidates?.[0]?.content;
       const parts = content?.parts || [];
-      const fc = parts.find(p => p.functionCall);
-      if (!fc) return res.json({ texto: limpiarMarkdown(parts.filter(p => !p.thought).map(p => p.text || '').join('').trim()) || 'No obtuve respuesta, intenta de nuevo.' });
+      const llamadas = parts.filter(p => p.functionCall);
+      if (!llamadas.length) return res.json({ texto: limpiarMarkdown(parts.filter(p => !p.thought).map(p => p.text || '').join('').trim()) || 'No obtuve respuesta, intenta de nuevo.' });
 
-      const r = fc.functionCall.name === 'crear_solicitud'
-        ? await crearSolicitud(fc.functionCall.args || {}, ultimoUsuario, ip)
-        : { error: 'Herramienta desconocida.' };
-      if (r.ok) {
-        return res.json({
-          folio: r.folio,
-          texto: `✅ Listo, ${r.nombre.split(' ')[0]}. Tu solicitud quedó registrada con el folio ${r.folio}. Un electricista la revisará y confirmará pronto. Puedes seguirla en "Rastrear mi folio".`
-        });
+      const respuestas = []; let final = null;
+      for (const p of llamadas) {
+        const r = await ejecutar(p.functionCall.name, p.functionCall.args || {}, ctx);
+        if (r.ok && r.final && !final) final = r;
+        respuestas.push({ functionResponse: { id: p.functionCall.id, name: p.functionCall.name, response: r.ok ? (r.datos || { ok: true }) : { error: r.error } } });
       }
-      contents.push(content); // se devuelve tal cual (con las firmas de pensamiento), como exige Gemini 3.x
-      contents.push({ role: 'user', parts: [{ functionResponse: { id: fc.functionCall.id, name: fc.functionCall.name, response: { error: r.error } } }] });
+      if (final) return res.json({ texto: final.texto, ...(final.extra || {}) });
+      contents.push(content);   // se devuelve tal cual (con las firmas de pensamiento), como exige Gemini 3.x
+      contents.push({ role: 'user', parts: respuestas });
     }
-    return res.json({ texto: 'No pude completar la solicitud por el chat. Puedes llenarla en el formulario o escribirnos por WhatsApp.' });
+    // No se resolvió en varios intentos: pasa automáticamente a una persona
+    const h = await registrarEscalacion({ destino: 'administracion', motivo: 'Ampi no pudo resolver la consulta', resumen: ultimoUsuario }, ctx);
+    return res.json({ texto: 'No pude resolver esto por el chat. Te paso con administración: toca «Llamar ahora» o escribe por WhatsApp.', handoff: h });
   } catch (e) {
     console.error('api/gemini', e);
-    return res.status(500).json({ texto: 'El asistente no está disponible por ahora. Escríbenos por WhatsApp.' });
+    return res.status(500).json({ texto: 'El asistente no está disponible por ahora. Puedes llamar o escribir a administración.', handoff: HANDOFF_FALLA,
+      ...(process.env.ISEP_DEBUG === '1' ? { error: String(e.message || e).slice(0, 400) } : {}) });
   }
-}
-
-// Quita formato Markdown por si el modelo lo agrega (negritas, cursivas, encabezados, código, viñetas).
-function limpiarMarkdown(texto) {
-  return texto
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/__(.*?)__/g, '$1')
-    .replace(/_(.*?)_/g, '$1')
-    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
-    .replace(/^#{1,6}\s*/gm, '')
-    .replace(/^[-*]\s+/gm, '• ')
-    .trim();
 }
